@@ -31,6 +31,7 @@ LOGIN_HTML = (Path(__file__).parent.parent / "web" / "login.html").read_text()
 now_playing = NowPlaying()
 now_playing_thumb: str = ""
 current_mode: str = "random"
+current_filename: str = ""
 _secret: bytes = b""
 
 # Services
@@ -45,6 +46,27 @@ bot = MatrixBot(
     settings.matrix_room_id,
     settings.allowed_users_list,
 )
+
+
+def _parse_request_query(query: str) -> tuple[str, str]:
+    """Return (artist, title). Either may be empty."""
+    if " - " in query:
+        artist, _, title = query.partition(" - ")
+        return artist.strip(), title.strip()
+    lower = query.lower()
+    # "title by artist" — only match " by " not at the very start
+    idx = lower.rfind(" by ")
+    if idx > 0:
+        return query[idx + 4:].strip(), query[:idx].strip()
+    return "", query.strip()
+
+
+def _path_to_label(path: str) -> str:
+    stem = Path(path).stem
+    if " - " in stem:
+        artist_part, _, title_part = stem.partition(" - ")
+        return f"{artist_part} — {title_part}"
+    return stem
 
 
 def write_playlist(paths: list[str]) -> None:
@@ -69,10 +91,21 @@ def load_mode() -> str:
 
 async def _ai_tool_handler(name: str, inputs: dict) -> str:
     if name == "request_track":
-        results = plex.search_tracks(inputs["query"])
-        if not results:
-            return f"No tracks found for: {inputs['query']}"
-        track = results[0]
+        query = inputs["query"]
+        artist_hint, title_query = _parse_request_query(query)
+        track = None
+        if artist_hint and title_query:
+            results = plex.search_tracks(title_query, artist_filter=artist_hint)
+            track = results[0] if results else None
+        elif artist_hint:
+            track = plex.get_random_track_by_artist(artist_hint)
+        else:
+            track = plex.get_random_track_by_artist(title_query)
+            if not track:
+                results = plex.search_tracks(title_query)
+                track = results[0] if results else None
+        if not track:
+            return f"No tracks found for: {query}"
         ok = await liquidsoap.push_request(track["path"])
         return f"Queued: {track['artist']} — {track['title']}" if ok else "Failed to queue track"
 
@@ -85,6 +118,7 @@ async def _ai_tool_handler(name: str, inputs: dict) -> str:
         if not tracks:
             playlists = plex.list_playlists()
             return f"Playlist not found. Available: {', '.join(playlists)}"
+        random.shuffle(tracks)
         write_playlist(tracks)
         set_mode(f"playlist:{inputs['name']}")
         return f"Switched to playlist: {inputs['name']} ({len(tracks)} tracks)"
@@ -120,6 +154,21 @@ async def _ai_tool_handler(name: str, inputs: dict) -> str:
         write_playlist(tracks)
         set_mode("random")
         return f"Full library shuffle ({len(tracks)} tracks)"
+
+    if name == "stop_playback":
+        write_playlist([])
+        await liquidsoap.skip()
+        set_mode("stopped")
+        return "Station stopped"
+
+    if name == "start_playback":
+        tracks = plex.get_all_tracks()
+        random.shuffle(tracks)
+        write_playlist(tracks)
+        set_mode("random")
+        await liquidsoap.reload_playlist()
+        await liquidsoap.skip()
+        return f"Started: random shuffle ({len(tracks)} tracks)"
 
     if name == "list_playlists":
         playlists = plex.list_playlists()
@@ -158,23 +207,50 @@ async def handle_command(sender: str, cmd: str, args: str) -> None:
 
     if cmd == "!np":
         if now_playing.title:
-            msg = f"Now Playing: {now_playing.artist} — {now_playing.title}"
+            lines = []
+            if now_playing.artist:
+                lines.append(f"Artist: {now_playing.artist}")
+            lines.append(f"Track:  {now_playing.title}")
             if now_playing.album:
-                msg += f"\n  {now_playing.album}"
-            msg += f"\n  Mode: {current_mode}"
+                lines.append(f"Album:  {now_playing.album}")
+            lines.append(f"Mode:   {current_mode}")
+            msg = "\n".join(lines)
         else:
             msg = "Nothing playing yet."
         await bot.send_message(msg)
 
     elif cmd == "!request":
         if not args:
-            await bot.send_message("Usage: !request <search terms>")
+            await bot.send_message(
+                "Usage:\n"
+                "  !request <track>            — search by title\n"
+                "  !request <artist>           — random track by artist\n"
+                "  !request <artist> - <track> — specific artist + title\n"
+                "  !request <track> by <artist>"
+            )
             return
-        results = plex.search_tracks(args)
-        if not results:
-            await bot.send_message(f"No tracks found: {args}")
-            return
-        track = results[0]
+        artist_hint, title_query = _parse_request_query(args)
+        track = None
+        if artist_hint and title_query:
+            results = plex.search_tracks(title_query, artist_filter=artist_hint)
+            track = results[0] if results else None
+            if not track:
+                await bot.send_message(f"No tracks found: {artist_hint} — {title_query}")
+                return
+        elif artist_hint:
+            track = plex.get_random_track_by_artist(artist_hint)
+            if not track:
+                await bot.send_message(f"Artist not found: {artist_hint}")
+                return
+        else:
+            # No separator — try artist search first, fall back to track search
+            track = plex.get_random_track_by_artist(title_query)
+            if not track:
+                results = plex.search_tracks(title_query)
+                track = results[0] if results else None
+            if not track:
+                await bot.send_message(f"No tracks found: {title_query}")
+                return
         ok = await liquidsoap.push_request(track["path"])
         if ok:
             await bot.send_message(f"Queued: {track['artist']} — {track['title']}")
@@ -197,6 +273,7 @@ async def handle_command(sender: str, cmd: str, args: str) -> None:
                 f"Playlist '{args}' not found.\nAvailable: " + (", ".join(playlists) or "none")
             )
             return
+        random.shuffle(tracks)
         write_playlist(tracks)
         set_mode(f"playlist:{args}")
         await bot.send_message(f"Switched to playlist: {args} ({len(tracks)} tracks)")
@@ -241,6 +318,22 @@ async def handle_command(sender: str, cmd: str, args: str) -> None:
         set_mode(f"genre:{args}")
         await bot.send_message(f"Genre: {args} ({len(tracks)} tracks)")
 
+    elif cmd == "!stop":
+        write_playlist([])
+        await liquidsoap.skip()
+        set_mode("stopped")
+        await bot.send_message("Station stopped.")
+
+    elif cmd == "!start":
+        await bot.send_message("Starting up...")
+        tracks = plex.get_all_tracks()
+        random.shuffle(tracks)
+        write_playlist(tracks)
+        set_mode("random")
+        await liquidsoap.reload_playlist()
+        await liquidsoap.skip()
+        await bot.send_message(f"Playing: random shuffle ({len(tracks)} tracks)")
+
     elif cmd == "!random":
         await bot.send_message("Shuffling full library...")
         tracks = plex.get_all_tracks()
@@ -251,6 +344,32 @@ async def handle_command(sender: str, cmd: str, args: str) -> None:
 
     elif cmd == "!mode":
         await bot.send_message(f"Current mode: {current_mode}")
+
+    elif cmd == "!queue":
+        lines: list[str] = []
+
+        pending = await liquidsoap.get_request_queue()
+        if pending:
+            lines.append("Queued requests:")
+            for t in pending:
+                lines.append(f"  {t.get('artist', '?')} — {t.get('title', '?')}")
+
+        try:
+            with open(PLAYLIST_FILE) as f:
+                playlist_lines = [l.strip() for l in f if l.strip()]
+            if current_filename and current_filename in playlist_lines:
+                idx = playlist_lines.index(current_filename)
+                upcoming = playlist_lines[idx + 1:idx + 6]
+            else:
+                upcoming = playlist_lines[:5]
+            if upcoming:
+                lines.append("Up next:")
+                for path in upcoming:
+                    lines.append(f"  {_path_to_label(path)}")
+        except FileNotFoundError:
+            pass
+
+        await bot.send_message("\n".join(lines) if lines else "Queue is empty.")
 
     elif cmd == "!playlists":
         playlists = plex.list_playlists()
@@ -265,17 +384,27 @@ HELP_TEXT = (
     "  !np / !playing        — now playing\n"
     "  !request / !play      — queue a track\n"
     "  !skip / !next         — skip current track\n"
+    "  !queue                — show upcoming tracks\n"
     "  !playlist <name>      — switch to Plex playlist\n"
     "  !similar <artist>     — smart radio similar to artist\n"
     "  !genre <genre>        — play by genre\n"
     "  !random / !shuffle    — shuffle full library\n"
+    "  !start                — start playback (random shuffle)\n"
+    "  !stop                 — stop playback\n"
     "  !playlists            — list Plex playlists\n"
     "  !mode                 — show current mode\n"
+    "  !help                 — show this message\n"
     + ("  Or just @-mention me and chat!" if ai else "")
 )
 
 bot.command_handler = handle_command
 bot.ai_handler = handle_ai_message
+
+_welcome_lines = ["Welcome to DrWahl Radio!"]
+if settings.stream_url:
+    _welcome_lines.append(f"Listen in: {settings.stream_url}")
+_welcome_lines.append("\n" + HELP_TEXT)
+bot.welcome_message = "\n".join(_welcome_lines)
 
 
 async def _on_bot_ready() -> None:
@@ -369,13 +498,14 @@ async def track_changed(
     album: str = Form(default=""),
     filename: str = Form(default=""),
 ) -> dict:
-    global now_playing, now_playing_thumb
+    global now_playing, now_playing_thumb, current_filename
 
     if title == now_playing.title and artist == now_playing.artist:
         return {"ok": True}
 
     now_playing = NowPlaying(title=title, artist=artist, album=album, mode=current_mode)
     now_playing_thumb = ""
+    current_filename = filename
 
     try:
         candidates = plex.search_tracks(title, limit=10)

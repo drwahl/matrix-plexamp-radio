@@ -12,7 +12,7 @@ requests = request.queue(id="requests")
 # reload_mode="watch" picks up file changes immediately via inotify
 background = playlist(
   id="background",
-  mode="randomize",
+  mode="normal",
   reload_mode="watch",
   "/data/background.m3u"
 )

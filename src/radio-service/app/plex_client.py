@@ -1,4 +1,6 @@
 import logging
+import random
+from typing import Optional
 from plexapi.server import PlexServer
 from plexapi.audio import Track
 
@@ -27,9 +29,10 @@ class PlexClient:
     def _track_to_path(self, track: Track) -> str:
         return self.to_liquidsoap_path(track.media[0].parts[0].file)
 
-    def search_tracks(self, query: str, limit: int = 10) -> list[dict]:
-        results = self._music.search(query, libtype="track", maxresults=limit)
-        return [
+    def search_tracks(self, query: str, limit: int = 10, artist_filter: str = "") -> list[dict]:
+        fetch = limit if not artist_filter else limit * 4
+        results = self._music.search(query, libtype="track", maxresults=fetch)
+        tracks = [
             {
                 "title": t.title,
                 "artist": t.grandparentTitle,
@@ -40,6 +43,31 @@ class PlexClient:
             }
             for t in results
         ]
+        if artist_filter:
+            norm = lambda s: s.lower().replace(" ", "")
+            af = norm(artist_filter)
+            tracks = [t for t in tracks if af in norm(t["artist"]) or norm(t["artist"]) in af]
+        return tracks[:limit]
+
+    def get_random_track_by_artist(self, artist_name: str) -> Optional[dict]:
+        """Return a random track dict for the named artist, or None if not found."""
+        results = self._music.search(artist_name, libtype="artist", maxresults=5)
+        if not results:
+            return None
+        norm = lambda s: s.lower().strip()
+        an = norm(artist_name)
+        artist = next((a for a in results if norm(a.title) == an), results[0])
+        tracks = artist.tracks()
+        if not tracks:
+            return None
+        t = random.choice(tracks)
+        return {
+            "title": t.title,
+            "artist": t.grandparentTitle,
+            "album": t.parentTitle,
+            "path": self._track_to_path(t),
+            "thumb": t.parentThumb or t.thumb or "",
+        }
 
     def get_tracks_by_artist(self, artist_name: str) -> list[str]:
         try:

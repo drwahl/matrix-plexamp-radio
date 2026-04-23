@@ -2,7 +2,7 @@ import asyncio
 import logging
 from collections.abc import Awaitable, Callable
 
-from nio import AsyncClient, MatrixRoom, RoomMessageText
+from nio import AsyncClient, MatrixRoom, RoomMemberEvent, RoomMessageText
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +27,7 @@ class MatrixBot:
         self.command_handler: CommandHandler | None = None
         self.ai_handler: AIHandler | None = None
         self.on_ready: ReadyHandler | None = None
+        self.welcome_message: str = ""
 
     async def send_message(self, body: str) -> None:
         await self.client.room_send(
@@ -36,24 +37,29 @@ class MatrixBot:
         )
 
     async def send_now_playing(self, title: str, artist: str, album: str) -> None:
-        lines = [f"Now Playing: {artist} — {title}"]
+        lines = []
+        if artist:
+            lines.append(f"Artist: {artist}")
+        if title:
+            lines.append(f"Track:  {title}")
         if album:
-            lines.append(f"  {album}")
+            lines.append(f"Album:  {album}")
         await self.send_message("\n".join(lines))
 
     async def run(self) -> None:
         logger.info("Matrix bot syncing...")
         # Initial sync first — advances the next_batch token past historical messages
         # so sync_forever only delivers events that arrive after bot startup.
-        await self.client.sync(timeout=30000, full_state=True)
+        await self.client.sync(timeout=5000, full_state=True)
         if self.room_id in self.client.invited_rooms:
             logger.info("Accepting room invite for %s", self.room_id)
             await self.client.join(self.room_id)
         # Register callback only after the initial sync to avoid replaying old commands.
         self.client.add_event_callback(self._on_message, RoomMessageText)
+        self.client.add_event_callback(self._on_member_event, RoomMemberEvent)
         if self.on_ready:
             await self.on_ready()
-        await self.client.sync_forever(timeout=30000)
+        await self.client.sync_forever(timeout=5000)
 
     async def _on_message(self, room: MatrixRoom, event: RoomMessageText) -> None:
         if room.room_id != self.room_id:
@@ -66,6 +72,8 @@ class MatrixBot:
         if not body:
             return
 
+        await self.client.room_read_markers(self.room_id, event.event_id, event.event_id)
+
         if body.startswith("!") and self.command_handler:
             parts = body.split(None, 1)
             cmd = parts[0].lower()
@@ -73,6 +81,27 @@ class MatrixBot:
             await self.command_handler(event.sender, cmd, args)
         elif self.ai_handler and self._mentions_bot(body):
             await self.ai_handler(event.sender, body)
+
+    async def _on_member_event(self, room: MatrixRoom, event: RoomMemberEvent) -> None:
+        if room.room_id != self.room_id:
+            return
+        if event.membership != "join" or event.prev_membership == "join":
+            return
+        if event.sender == self.client.user_id:
+            return
+        if self.welcome_message:
+            await self._send_dm(event.sender, self.welcome_message)
+
+    async def _send_dm(self, user_id: str, message: str) -> None:
+        resp = await self.client.room_create(is_direct=True, invite=[user_id])
+        if hasattr(resp, "room_id"):
+            await self.client.room_send(
+                resp.room_id,
+                message_type="m.room.message",
+                content={"msgtype": "m.text", "body": message},
+            )
+        else:
+            logger.warning("Failed to create DM room for %s: %s", user_id, resp)
 
     def _mentions_bot(self, body: str) -> bool:
         body_lower = body.lower()

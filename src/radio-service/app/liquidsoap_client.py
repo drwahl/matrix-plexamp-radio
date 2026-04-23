@@ -17,7 +17,7 @@ class LiquidsoapClient:
             lines: list[str] = []
             while True:
                 line = await asyncio.wait_for(reader.readline(), timeout=5.0)
-                text = line.decode().strip()
+                text = line.decode("utf-8", errors="replace").strip()
                 if text == "END":
                     break
                 if text:
@@ -35,9 +35,27 @@ class LiquidsoapClient:
     async def skip(self) -> None:
         await self._command("out.skip")
 
+    async def reload_playlist(self) -> None:
+        await self._command("background.reload")
+
     async def push_request(self, filepath: str) -> bool:
         result = await self._command(f"requests.push {filepath}")
         return result.strip().isdigit()
+
+    async def get_request_queue(self) -> list[dict[str, str]]:
+        rids_raw = await self._command("requests.queue")
+        rids = [r for r in rids_raw.split() if r.strip().isdigit()]
+        tracks: list[dict[str, str]] = []
+        for rid in rids:
+            meta_raw = await self._command(f"request.metadata {rid}")
+            meta: dict[str, str] = {}
+            for line in meta_raw.splitlines():
+                if "=" in line:
+                    key, _, val = line.partition("=")
+                    meta[key.strip()] = val.strip().strip('"')
+            if meta:
+                tracks.append(meta)
+        return tracks
 
     async def now_on_air(self) -> str:
         return await self._command("request.on_air")

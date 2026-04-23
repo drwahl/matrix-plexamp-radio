@@ -22,6 +22,16 @@ You have tools to control the radio. Use them naturally when someone asks: \
 "play some jazz" → genre_radio, "queue some Radiohead" → request_track, \
 "skip this" → skip_track, "what's playing?" → you already know from context.
 
+IMPORTANT — tool distinction:
+- request_track queues ONE track to play next, then the station automatically \
+returns to whatever background mode was already running. It does NOT change the \
+background mode. Use it when someone wants a specific song without disrupting \
+the current playlist or mode.
+- play_playlist, similar_artist_radio, genre_radio, and random_shuffle REPLACE \
+the current background mode entirely. Only use these when someone explicitly \
+wants to change what the station is playing long-term.
+- Never call a mode-changing tool at the same time as request_track. Pick one.
+
 Keep responses short — a sentence or two. This is a chat room, not a podcast. \
 When you change something on the radio, confirm it briefly and conversationally.\
 """
@@ -32,11 +42,11 @@ RADIO_TOOLS: list[dict] = [
         "type": "function",
         "function": {
             "name": "request_track",
-            "description": "Search for a track and queue it to play next.",
+            "description": "Search for a track and queue it to play next as a one-shot request. The station automatically returns to the current background mode after the track finishes. Does NOT change the background playlist or mode.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "query": {"type": "string", "description": "Artist, title, or both"}
+                    "query": {"type": "string", "description": "Track title, artist name, or 'Artist - Title' to disambiguate. Use artist name alone to pick a random track by that artist."}
                 },
                 "required": ["query"],
             },
@@ -91,6 +101,22 @@ RADIO_TOOLS: list[dict] = [
         "function": {
             "name": "random_shuffle",
             "description": "Shuffle and play the full music library.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "stop_playback",
+            "description": "Stop the station. Clears the playlist and silences the stream.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "start_playback",
+            "description": "Start the station with a random shuffle of the full library.",
             "parameters": {"type": "object", "properties": {}},
         },
     },
