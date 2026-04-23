@@ -167,15 +167,75 @@ All commands require your Matrix user ID to be in `ALLOWED_MATRIX_USERS`.
 | `!np` | Show what's currently playing |
 | `!request <query>` | Search Plex and queue the top result |
 | `!skip` | Skip the current track |
-| `!playlist <name>` | Switch to a Plex playlist |
+| `!playlist <name>` | Switch to a Plex or shared playlist |
 | `!similar <artist>` | Smart radio: similar artists via Last.fm (requires `LASTFM_API_KEY`) |
 | `!genre <genre>` | Play tracks filtered by genre |
 | `!random` | Shuffle your full library |
-| `!playlists` | List available Plex playlists |
+| `!playlists` | List all playlists (Plex + shared) |
 | `!mode` | Show current playback mode |
 | `!help` | Show all commands |
 
+**Per-user playlist:**
+
+| Command | Description |
+|---------|-------------|
+| `!save` | Save the currently playing track to your personal playlist |
+| `!mylist` | Show your personal playlist |
+| `!mylist play` | Start playing your personal playlist |
+| `!mylist clear` | Clear your personal playlist |
+| `!mylist remove <N>` | Remove track N from your personal playlist |
+
+**Shared playlists** (any allowed user can manage):
+
+| Command | Description |
+|---------|-------------|
+| `!createplaylist <name>` | Create a new shared playlist |
+| `!addto <name> \| <query>` | Search Plex and add the top result to a shared playlist |
+| `!removefrom <name> \| <N>` | Remove track N from a shared playlist |
+| `!showplaylist <name>` | List tracks in a shared playlist |
+| `!deleteplaylist <name>` | Delete a shared playlist |
+
+Shared playlists are mirrored to Plex as `matrix_<name>` so they appear in Plexamp. If the Plex token lacks write permission the local playlist still works; the mirror is best-effort.
+
 Track changes are announced automatically. If AI is enabled, **@-mention the bot** to chat naturally — it can control the radio through conversation too.
+
+---
+
+## Development
+
+### Running tests
+
+Tests live in `src/radio-service/tests/` and are built into the container image. Run them inside the container where all dependencies are installed:
+
+```bash
+docker exec radio python3 -m pytest /app/tests/ -v
+```
+
+The test suite covers import-time errors (catches Python version incompatibilities), auth token logic, request parsing, and Plex path translation.
+
+### Linting and formatting
+
+`flake8` and `autopep8` are included in `requirements.txt` and available in the container:
+
+```bash
+# check for violations
+docker exec radio python3 -m flake8 /app/app/ /app/tests/
+
+# auto-fix formatting in place (local dev)
+python3 -m autopep8 --in-place --recursive src/radio-service/app/
+```
+
+Config: `src/radio-service/.flake8` (max line 100, E203/E501 suppressed) and `src/radio-service/setup.cfg` (autopep8 matching line length).
+
+### Pre-commit hook
+
+A git pre-commit hook is checked in at `hooks/pre-commit`. Enable it once per checkout:
+
+```bash
+git config core.hooksPath hooks
+```
+
+On each commit it auto-formats staged `.py` files with autopep8 (re-staging any changes) then runs flake8. The commit is blocked if flake8 finds any violations. The hook is a no-op if the tools aren't installed locally.
 
 ---
 
@@ -258,6 +318,8 @@ docker exec radio-station_radio-station_1 \
 radio-station/
 ├── docker-compose.yml        # local deployment (--profile ai adds Ollama)
 ├── .env.example              # copy to .env
+├── hooks/
+│   └── pre-commit            # autopep8 + flake8 on staged .py files
 ├── src/
 │   ├── Dockerfile            # single-container image
 │   ├── entrypoint.sh         # renders config templates from env, starts supervisord
@@ -268,18 +330,27 @@ radio-station/
 │   │   └── nginx.conf.tmpl
 │   ├── radio-service/
 │   │   ├── requirements.txt
-│   │   └── app/
-│   │       ├── main.py             # FastAPI app, bot command handlers, track webhook
-│   │       ├── matrix_bot.py       # matrix-nio client
-│   │       ├── ai_client.py        # litellm wrapper, DJ personality, tool loop
-│   │       ├── auth.py             # Matrix login validation, session cookie signing
-│   │       ├── plex_client.py      # Plex API: search, playlists, album art, path translation
-│   │       ├── liquidsoap_client.py # telnet client: skip, push request
-│   │       ├── lastfm_client.py    # similar-artist lookup
-│   │       ├── config.py           # pydantic-settings from env
-│   │       └── models.py           # Pydantic models
+│   │   ├── pytest.ini              # testpaths, pythonpath, asyncio_mode=auto
+│   │   ├── .flake8                 # max-line-length=100, ignore E203/E501
+│   │   ├── setup.cfg               # autopep8 max-line-length=100
+│   │   ├── app/
+│   │   │   ├── main.py             # FastAPI app, bot command handlers, track webhook
+│   │   │   ├── matrix_bot.py       # matrix-nio client
+│   │   │   ├── ai_client.py        # litellm wrapper, DJ personality, tool loop
+│   │   │   ├── auth.py             # Matrix login validation, session cookie signing
+│   │   │   ├── plex_client.py      # Plex API: search, playlists, album art, path translation
+│   │   │   ├── liquidsoap_client.py # telnet client: skip, push request
+│   │   │   ├── lastfm_client.py    # similar-artist lookup
+│   │   │   ├── config.py           # pydantic-settings from env
+│   │   │   └── models.py           # Pydantic models
+│   │   └── tests/
+│   │       ├── conftest.py         # env vars + stubbed external deps (plexapi, nio, litellm)
+│   │       ├── test_imports.py     # import-time checks for all modules (catches annotation errors)
+│   │       ├── test_auth.py        # token roundtrip, expiry, tampering
+│   │       ├── test_main.py        # _parse_request_query, _path_to_label, _find_shared
+│   │       └── test_plex_client.py # to_liquidsoap_path path translation
 │   └── web/
-│       ├── index.html         # web player: album art, ambient background, play/pause
+│       ├── index.html         # web player: search, playlists, album art, ambient background
 │       └── login.html         # Matrix auth login page
 └── ansible/
     ├── playbook.yml

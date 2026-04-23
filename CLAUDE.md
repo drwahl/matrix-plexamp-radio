@@ -66,7 +66,7 @@ If Plex's reported library root doesn't match `/music` in the container, tracks 
 |------|---------|
 | `src/radio-service/app/main.py` | FastAPI app, all bot command handlers, track-changed webhook |
 | `src/radio-service/app/matrix_bot.py` | matrix-nio bot — sends messages, dispatches commands |
-| `src/radio-service/app/plex_client.py` | Plex API — search, playlists, path translation, thumbnails |
+| `src/radio-service/app/plex_client.py` | Plex API — search, playlists, path translation, thumbnails, Plex sync |
 | `src/radio-service/app/lastfm_client.py` | Last.fm — similar artist lookup for `!similar` |
 | `src/radio-service/app/liquidsoap_client.py` | Telnet client — skip, push request, query on-air |
 | `src/radio-service/app/ai_client.py` | AI DJ engine — litellm-backed chat with agentic tool loop |
@@ -75,6 +75,26 @@ If Plex's reported library root doesn't match `/music` in the container, tracks 
 | `src/config/radio.liq.tmpl` | Liquidsoap script — sources, fallback chain, on_metadata hook, Icecast output |
 | `src/entrypoint.sh` | Container init — renders configs, seeds background.m3u, execs supervisord |
 | `src/supervisord.conf` | Process definitions and startup ordering |
+| `src/radio-service/tests/conftest.py` | pytest fixtures — env vars + stubbed external deps |
+| `src/radio-service/.flake8` | flake8 config (max-line-length=100, E203/E501 suppressed) |
+| `src/radio-service/setup.cfg` | autopep8 config (matching max-line-length) |
+| `hooks/pre-commit` | Git pre-commit hook — autopep8 auto-fix then flake8 lint |
+
+## Three-tier playlist system
+
+There are three distinct playlist types — never mix them up:
+
+| Type | Storage | Who can modify | Plex mirror |
+|------|---------|----------------|-------------|
+| **Plex native** | Plex server | Nobody (read-only via this system) | Authoritative source |
+| **User** | `/data/user_playlists.json`, keyed by Matrix user ID | Owner only (identified by session cookie) | No |
+| **Shared** | `/data/shared_playlists.json` | Any authenticated user | Yes — `matrix_<name>` in Plex |
+
+`!playlist <name>` checks shared playlists first, then Plex native. `!playlists` shows both with labels. `list_playlists()` in `plex_client.py` filters out `matrix_` prefixed playlists so they don't appear as a separate Plex entry in listings.
+
+Shared playlist mutations always call `_sync_to_plex()` (full delete + recreate of `matrix_<name>`). Plex sync failures are logged and non-fatal — local state is always authoritative.
+
+Track dicts include a `key` field (the Plex item key, e.g. `/library/metadata/12345`). This is required for Plex sync — `PlexServer.fetchItem(key)` resolves the track object. Keys are stored in both user and shared playlist JSON.
 
 ## Adding a new bot command
 
@@ -91,6 +111,47 @@ elif cmd == "!mycommand":
 
 `write_playlist()` writes to `/data/background.m3u`. Liquidsoap picks it up automatically. Use `set_mode()` (not direct assignment) so the mode persists across container restarts. Add the command to `!help` too.
 
+## Testing
+
+Tests are built into the container image. Run them inside the container where all dependencies are installed:
+
+```bash
+docker exec radio python3 -m pytest /app/tests/ -v
+```
+
+**Test files:**
+
+- `test_imports.py` — one test per app module; catches annotation errors and any import-time crash (e.g. Python 3.9 `str | None` syntax)
+- `test_auth.py` — token roundtrip, wrong secret, tampered payload/signature, expired token, malformed tokens, Matrix IDs with colons, secret file persistence
+- `test_main.py` — `_parse_request_query`, `_path_to_label`, `_find_shared`
+- `test_plex_client.py` — `to_liquidsoap_path` path translation (single root, trailing slash, no match, multiple roots, no double-slash)
+
+`conftest.py` sets required env vars and stubs `plexapi`, `nio`, `litellm`, and `pylast` via `sys.modules.setdefault()` so tests run without live services. The PlexServer mock is wired so `PlexClient.__init__` succeeds with a `locations = ["/mnt/music"]` default.
+
+**Python version note:** All app modules use `from __future__ import annotations` at the top. This defers annotation evaluation so modern union syntax (`X | None`, `list[str]`) works on Python 3.9 (the version in the container). Do not remove this import and do not use bare `str | None` annotations in new files without it.
+
+## Linting and formatting
+
+`flake8` and `autopep8` are installed in the container alongside app dependencies:
+
+```bash
+# check for violations
+docker exec radio python3 -m flake8 /app/app/ /app/tests/
+
+# auto-fix formatting in place (local dev)
+python3 -m autopep8 --in-place --recursive src/radio-service/app/
+```
+
+Config lives in `src/radio-service/.flake8` (max line 100, E203/E501 suppressed) and `src/radio-service/setup.cfg` (autopep8 matching line length).
+
+A git pre-commit hook at `hooks/pre-commit` auto-runs both tools on staged Python files. Enable it once per checkout:
+
+```bash
+git config core.hooksPath hooks
+```
+
+The hook auto-formats with autopep8 (re-staging any changes), then runs flake8 and blocks the commit on violations. It's a no-op if the tools aren't installed locally.
+
 ## AI DJ (optional)
 
 Set `AI_MODEL` to enable the AI DJ feature. The model string is a litellm provider/model pair:
@@ -104,6 +165,8 @@ AI_MODEL=openai/gpt-4o-mini                     # OpenAI (set AI_API_KEY)
 When enabled, any Matrix message that @-mentions the bot (by full user ID or localpart) is routed to `handle_ai_message()` instead of the command parser. The AI responds as "DJ Wahl" and has access to all the same radio controls as the bot commands (request, skip, playlist, similar, genre, random, list playlists) via an agentic tool loop in `ai_client.py`. Conversation history is bounded to the last 20 messages (10 turns) — it's shared across all room members.
 
 The bot detects @-mentions by checking whether the bot's full Matrix ID or its localpart (the part before the `:`) appears in the message body.
+
+**Critical — AI handler must not block the sync loop.** The matrix-nio sync loop awaits callbacks inline. If `ai_handler` were awaited directly, a slow or hanging AI call would freeze all Matrix event processing (including `!commands`). The handler is therefore fired as `asyncio.create_task(self._run_ai(...))` so the sync loop continues immediately. `ai_client.py` uses `timeout=30, num_retries=0` on all litellm calls to prevent runaway retries if the backend (e.g. Ollama) is killed.
 
 ## Authentication
 
