@@ -51,8 +51,9 @@ end
 
 radio = source.on_metadata(radio, on_track)
 
-# Icecast output
+# Icecast output — id="out" gives us a stable telnet command "out.skip"
 output.icecast(
+  id="out",
   %mp3(bitrate=${STREAM_BITRATE}),
   host="localhost",
   port=8000,

@@ -33,11 +33,7 @@ class LiquidsoapClient:
             return ""
 
     async def skip(self) -> None:
-        on_air = await self._command("request.on_air")
-        if on_air.strip():
-            await self._command("requests.skip")
-        else:
-            await self._command("background.skip")
+        await self._command("out.skip")
 
     async def push_request(self, filepath: str) -> bool:
         result = await self._command(f"requests.push {filepath}")

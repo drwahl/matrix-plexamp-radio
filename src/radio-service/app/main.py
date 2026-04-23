@@ -145,7 +145,16 @@ async def handle_ai_message(sender: str, body: str) -> None:
         await bot.send_message(response)
 
 
+ALIASES: dict[str, str] = {
+    "!next":    "!skip",
+    "!shuffle": "!random",
+    "!play":    "!request",
+    "!playing": "!np",
+}
+
+
 async def handle_command(sender: str, cmd: str, args: str) -> None:
+    cmd = ALIASES.get(cmd, cmd)
 
     if cmd == "!np":
         if now_playing.title:
@@ -253,15 +262,15 @@ async def handle_command(sender: str, cmd: str, args: str) -> None:
 
 HELP_TEXT = (
     "Commands:\n"
-    "  !np              — now playing\n"
-    "  !request <query> — queue a track\n"
-    "  !skip            — skip current track\n"
-    "  !playlist <name> — switch to Plex playlist\n"
-    "  !similar <artist>— smart radio similar to artist\n"
-    "  !genre <genre>   — play by genre\n"
-    "  !random          — shuffle full library\n"
-    "  !playlists       — list Plex playlists\n"
-    "  !mode            — show current mode\n"
+    "  !np / !playing        — now playing\n"
+    "  !request / !play      — queue a track\n"
+    "  !skip / !next         — skip current track\n"
+    "  !playlist <name>      — switch to Plex playlist\n"
+    "  !similar <artist>     — smart radio similar to artist\n"
+    "  !genre <genre>        — play by genre\n"
+    "  !random / !shuffle    — shuffle full library\n"
+    "  !playlists            — list Plex playlists\n"
+    "  !mode                 — show current mode\n"
     + ("  Or just @-mention me and chat!" if ai else "")
 )
 
