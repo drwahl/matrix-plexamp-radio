@@ -1,0 +1,10 @@
+fastapi>=0.115
+python-multipart>=0.0.9
+uvicorn[standard]>=0.34
+matrix-nio>=0.25
+plexapi>=4.15
+pylast>=5.3
+pydantic-settings>=2.0
+aiofiles>=24.0
+httpx>=0.28
+litellm>=1.40

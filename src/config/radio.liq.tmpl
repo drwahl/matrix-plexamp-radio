@@ -1,0 +1,64 @@
+# Radio station config — generated from environment at container startup
+
+settings.init.allow_root.set(true)
+settings.server.telnet.set(true)
+settings.server.telnet.bind_addr.set("0.0.0.0")
+settings.server.telnet.port.set(1234)
+
+# On-demand request queue (highest priority)
+requests = request.queue(id="requests")
+
+# Background playlist managed by radio-service (/data/background.m3u)
+# reload_mode="watch" picks up file changes immediately via inotify
+background = playlist(
+  id="background",
+  mode="randomize",
+  reload_mode="watch",
+  "/data/background.m3u"
+)
+
+# background falls back to blank() immediately (track_sensitive=false) so Liquidsoap
+# switches back to background as soon as the playlist is filled, without needing a
+# track boundary from blank() (which never has one).
+bg = fallback(id="bg", track_sensitive=false, [background, blank()])
+
+# Requests play to completion before handing back to bg (track_sensitive=true).
+radio = fallback(id="radio", track_sensitive=true, [requests, bg])
+
+# Push track-change events to radio-service (runs in a separate thread
+# so HTTP I/O doesn't block the audio pipeline)
+def on_track(m) =
+  title    = m["title"]
+  artist   = m["artist"]
+  album    = m["album"]
+  filename = m["filename"]
+  def do_notify() =
+    data =
+      "title="    ^ url.encode(title)    ^
+      "&artist="  ^ url.encode(artist)   ^
+      "&album="   ^ url.encode(album)    ^
+      "&filename=" ^ url.encode(filename)
+    ignore(
+      http.post(
+        "http://localhost:8081/internal/track-changed",
+        headers=[("Content-Type", "application/x-www-form-urlencoded")],
+        data=data
+      )
+    )
+  end
+  ignore(thread.run(fast=false, do_notify))
+end
+
+radio = source.on_metadata(radio, on_track)
+
+# Icecast output
+output.icecast(
+  %mp3(bitrate=${STREAM_BITRATE}),
+  host="localhost",
+  port=8000,
+  password="${ICECAST_SOURCE_PASSWORD}",
+  mount="${STREAM_MOUNT}",
+  name="${STREAM_NAME}",
+  description="${STREAM_DESCRIPTION}",
+  radio
+)

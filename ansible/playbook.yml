@@ -1,0 +1,6 @@
+---
+- name: Deploy radio station
+  hosts: radio_station
+  become: true
+  roles:
+    - radio_station

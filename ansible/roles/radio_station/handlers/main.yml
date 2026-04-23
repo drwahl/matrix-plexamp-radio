@@ -1,0 +1,7 @@
+---
+- name: rebuild and restart radio station
+  community.docker.docker_container:
+    name: radio-station
+    image: radio-station:latest
+    state: started
+    restart: true

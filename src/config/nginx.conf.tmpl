@@ -1,0 +1,50 @@
+server {
+    listen 80;
+
+    root /app/web;
+    index index.html;
+
+    # Internal: used only by auth_request — not reachable from outside
+    location = /internal/auth-check {
+        internal;
+        proxy_pass              http://127.0.0.1:8081/internal/auth-check;
+        proxy_pass_request_body off;
+        proxy_set_header        Content-Length "";
+        proxy_set_header        Cookie $http_cookie;
+    }
+
+    # Auth endpoints — no authentication required
+    location /auth/ {
+        proxy_pass       http://127.0.0.1:8081/auth/;
+        proxy_set_header Host $host;
+    }
+
+    # Proxy public API endpoints — auth required
+    location /api/ {
+        auth_request     /internal/auth-check;
+        error_page 401 = @login_redirect;
+        proxy_pass       http://127.0.0.1:8081/api/;
+        proxy_set_header Host $host;
+    }
+
+    # Icecast stream — auth required, buffering off for live audio
+    location /stream {
+        auth_request       /internal/auth-check;
+        error_page 401   = @login_redirect;
+        proxy_pass         http://127.0.0.1:8000${STREAM_MOUNT};
+        proxy_buffering    off;
+        proxy_read_timeout 3600s;
+        proxy_set_header   Host $host;
+    }
+
+    # Static web player — auth required
+    location / {
+        auth_request     /internal/auth-check;
+        error_page 401 = @login_redirect;
+        try_files $uri $uri/ /index.html;
+    }
+
+    location @login_redirect {
+        return 302 $scheme://$http_host/auth/login;
+    }
+}

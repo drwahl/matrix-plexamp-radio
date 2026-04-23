@@ -1,0 +1,2 @@
+.env
+ansible/inventory/group_vars/vault.yml

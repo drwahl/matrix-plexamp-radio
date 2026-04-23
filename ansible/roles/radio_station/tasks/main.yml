@@ -1,0 +1,56 @@
+---
+- name: Ensure deploy directory exists
+  ansible.builtin.file:
+    path: "{{ radio_station_deploy_dir }}"
+    state: directory
+    mode: "0755"
+
+- name: Sync source files
+  ansible.posix.synchronize:
+    src: "{{ playbook_dir }}/../../src/"
+    dest: "{{ radio_station_deploy_dir }}/src/"
+    delete: true
+    recursive: true
+  notify: rebuild and restart radio station
+
+- name: Build radio station image
+  community.docker.docker_image:
+    name: radio-station
+    tag: latest
+    build:
+      path: "{{ radio_station_deploy_dir }}/src"
+      dockerfile: Dockerfile
+    source: build
+    force_source: true
+  notify: rebuild and restart radio station
+
+- name: Run radio station container
+  community.docker.docker_container:
+    name: radio-station
+    image: radio-station:latest
+    state: started
+    restart_policy: unless-stopped
+    recreate: true
+    ports:
+      - "{{ radio_station_web_port }}:80"
+    volumes:
+      - "{{ radio_station_media_path }}:/music:ro"
+      - "radio-station-data:/data"
+    env:
+      STREAM_NAME: "{{ radio_station_stream_name }}"
+      STREAM_DESCRIPTION: "{{ radio_station_stream_description }}"
+      STREAM_BITRATE: "{{ radio_station_stream_bitrate | string }}"
+      STREAM_MOUNT: "{{ radio_station_stream_mount }}"
+      ICECAST_SOURCE_PASSWORD: "{{ radio_station_icecast_source_password }}"
+      ICECAST_ADMIN_PASSWORD: "{{ radio_station_icecast_admin_password }}"
+      PLEX_URL: "{{ radio_station_plex_url }}"
+      PLEX_TOKEN: "{{ radio_station_plex_token }}"
+      PLEX_MEDIA_ROOT: "{{ radio_station_plex_media_root }}"
+      LASTFM_API_KEY: "{{ radio_station_lastfm_api_key }}"
+      MATRIX_HOMESERVER: "{{ radio_station_matrix_homeserver }}"
+      MATRIX_TOKEN: "{{ radio_station_matrix_token }}"
+      MATRIX_USER_ID: "{{ radio_station_matrix_user_id }}"
+      MATRIX_ROOM_ID: "{{ radio_station_matrix_room_id }}"
+      ALLOWED_MATRIX_USERS: "{{ radio_station_allowed_matrix_users | join(',') }}"
+      LIQUIDSOAP_HOST: "localhost"
+      LIQUIDSOAP_PORT: "1234"

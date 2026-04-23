@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Radio</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: system-ui, sans-serif;
+      background: #111;
+      color: #eee;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      gap: 1.5rem;
+      padding: 2rem;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Ambient blur from album art */
+    #ambient {
+      position: fixed;
+      inset: -40px;
+      background-size: cover;
+      background-position: center;
+      filter: blur(60px) brightness(0.35) saturate(1.6);
+      transition: background-image 1.2s ease;
+      z-index: 0;
+    }
+
+    /* Everything above the ambient layer */
+    body > * { position: relative; z-index: 1; }
+
+    #album-art {
+      width: 280px;
+      height: 280px;
+      object-fit: cover;
+      border-radius: 12px;
+      background: #1a1a1a;
+      display: block;
+      box-shadow: 0 8px 40px rgba(0,0,0,0.6);
+      transition: opacity 0.4s ease;
+    }
+    #album-art.hidden { opacity: 0; }
+
+    #now-playing { text-align: center; max-width: 340px; }
+    #track-title  { font-size: 1.5rem; font-weight: 700; margin-bottom: 0.3rem; line-height: 1.2; }
+    #track-artist { font-size: 1.1rem; color: #bbb; margin-bottom: 0.2rem; }
+    #track-album  { font-size: 0.9rem; color: #666; }
+    #track-mode   { font-size: 0.75rem; color: #555; margin-top: 0.5rem; font-style: italic; }
+
+    #controls {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.75rem;
+      width: 100%;
+      max-width: 320px;
+    }
+
+    #play-btn {
+      width: 68px;
+      height: 68px;
+      border-radius: 50%;
+      border: none;
+      background: #1db954;
+      color: #000;
+      font-size: 1.7rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.15s, transform 0.1s, box-shadow 0.15s;
+      box-shadow: 0 4px 20px rgba(29,185,84,0.4);
+      flex-shrink: 0;
+    }
+    #play-btn:hover { background: #1ed760; transform: scale(1.06); box-shadow: 0 6px 28px rgba(29,185,84,0.5); }
+    #play-btn:active { transform: scale(0.97); }
+    #play-btn.loading { background: #555; cursor: default; box-shadow: none; }
+
+    #volume-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      width: 100%;
+    }
+    #volume-row span { font-size: 1rem; color: #888; width: 1.2rem; text-align: center; }
+    #volume {
+      flex: 1;
+      accent-color: #1db954;
+      cursor: pointer;
+    }
+
+    #status {
+      font-size: 0.75rem;
+      color: #555;
+      letter-spacing: 0.05em;
+    }
+  </style>
+</head>
+<body>
+  <div id="ambient"></div>
+
+  <img id="album-art" class="hidden" alt="Album art">
+
+  <div id="now-playing">
+    <div id="track-title">—</div>
+    <div id="track-artist"></div>
+    <div id="track-album"></div>
+    <div id="track-mode"></div>
+  </div>
+
+  <div id="controls">
+    <button id="play-btn" title="Play / Pause">▶</button>
+    <div id="volume-row">
+      <span>🔈</span>
+      <input id="volume" type="range" min="0" max="1" step="0.02" value="1">
+      <span>🔊</span>
+    </div>
+    <div id="status">stopped</div>
+  </div>
+
+  <audio id="player">
+    <source src="/stream" type="audio/mpeg">
+  </audio>
+
+  <script>
+    const player  = document.getElementById('player');
+    const btn     = document.getElementById('play-btn');
+    const vol     = document.getElementById('volume');
+    const status  = document.getElementById('status');
+    const ambient = document.getElementById('ambient');
+
+    let playing = false;
+
+    function setStatus(text) { status.textContent = text; }
+
+    function startStream() {
+      player.src = '/stream?' + Date.now();
+      player.volume = parseFloat(vol.value);
+      player.play().then(() => {
+        playing = true;
+        btn.textContent = '⏸';
+        setStatus('playing');
+        localStorage.setItem('radioPlaying', '1');
+      }).catch(() => {
+        setStatus('click play to listen');
+      });
+    }
+
+    function stopStream() {
+      player.pause();
+      player.src = '';
+      playing = false;
+      btn.textContent = '▶';
+      setStatus('stopped');
+      localStorage.setItem('radioPlaying', '0');
+    }
+
+    btn.addEventListener('click', () => {
+      if (playing) stopStream(); else startStream();
+    });
+
+    vol.addEventListener('input', () => {
+      player.volume = parseFloat(vol.value);
+    });
+
+    player.addEventListener('waiting',  () => setStatus('buffering…'));
+    player.addEventListener('playing',  () => setStatus('playing'));
+    player.addEventListener('error',    () => { setStatus('stream error — retrying…'); setTimeout(startStream, 3000); });
+    player.addEventListener('stalled',  () => setStatus('stalled…'));
+
+    if (localStorage.getItem('radioPlaying') !== '0') {
+      startStream();
+    }
+
+    // Now-playing poller
+    let lastTitle = null;
+    async function updateNowPlaying() {
+      try {
+        const r = await fetch('/api/now-playing');
+        if (!r.ok) return;
+        const d = await r.json();
+        document.getElementById('track-title').textContent  = d.title  || '—';
+        document.getElementById('track-artist').textContent = d.artist || '';
+        document.getElementById('track-album').textContent  = d.album  || '';
+        document.getElementById('track-mode').textContent   = d.mode   ? `mode: ${d.mode}` : '';
+
+        const art = document.getElementById('album-art');
+        if (d.has_album_art && d.title !== lastTitle) {
+          const artUrl = '/api/album-art?' + Date.now();
+          art.onload = () => {
+            art.classList.remove('hidden');
+            ambient.style.backgroundImage = `url('${artUrl}')`;
+          };
+          art.onerror = () => {
+            art.classList.add('hidden');
+            ambient.style.backgroundImage = '';
+          };
+          art.src = artUrl;
+        } else if (!d.has_album_art) {
+          art.classList.add('hidden');
+          ambient.style.backgroundImage = '';
+        }
+        lastTitle = d.title;
+      } catch (_) {}
+    }
+    updateNowPlaying();
+    setInterval(updateNowPlaying, 5000);
+  </script>
+</body>
+</html>

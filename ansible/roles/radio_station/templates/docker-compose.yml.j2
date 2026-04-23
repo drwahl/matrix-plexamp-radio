@@ -1,0 +1,51 @@
+networks:
+  radio_internal:
+    internal: true
+  radio_external:
+
+volumes:
+  radio_data:
+
+services:
+  icecast:
+    build: ./src/icecast
+    restart: unless-stopped
+    networks:
+      - radio_internal
+      - radio_external
+    ports:
+      - "{{ radio_station_icecast_port }}:8000"
+    volumes:
+      - ./config/icecast.xml:/etc/icecast2/icecast.xml:ro
+
+  liquidsoap:
+    image: savonet/liquidsoap:2.3.x
+    restart: unless-stopped
+    networks:
+      - radio_internal
+    volumes:
+      - ./config/radio.liq:/etc/liquidsoap/radio.liq:ro
+      - {{ radio_station_media_path }}:/music:ro
+      - radio_data:/data
+    command: ["/etc/liquidsoap/radio.liq"]
+
+  radio-service:
+    build: ./src/radio-service
+    restart: unless-stopped
+    networks:
+      - radio_internal
+    env_file: .env
+    volumes:
+      - radio_data:/data
+
+  nginx:
+    image: nginx:alpine
+    restart: unless-stopped
+    networks:
+      - radio_internal
+      - radio_external
+    ports:
+      - "{{ radio_station_web_port }}:80"
+    volumes:
+      - ./config/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./src/web:/usr/share/nginx/html:ro

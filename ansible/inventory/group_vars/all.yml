@@ -1,0 +1,28 @@
+# Deploy location on remote host
+radio_station_deploy_dir: /opt/radio-station
+
+# Music library path on remote host (same path Plex uses)
+radio_station_media_path: /mnt/media/music
+
+# Plex reports file paths with this prefix; Liquidsoap sees /music
+radio_station_plex_media_root: /mnt/media/music
+
+# Ports exposed on the host
+radio_station_icecast_port: 8000
+radio_station_web_port: 8080
+
+# Stream metadata
+radio_station_stream_name: "My Radio"
+radio_station_stream_description: "Personal radio stream"
+radio_station_stream_bitrate: 320
+radio_station_stream_mount: /stream
+
+# Plex server (accessible from the fileserver)
+radio_station_plex_url: "http://localhost:32400"
+
+# Matrix
+radio_station_matrix_homeserver: "https://matrix.example.com"
+radio_station_matrix_user_id: "@radiobot:example.com"
+radio_station_matrix_room_id: "!roomid:example.com"
+radio_station_allowed_matrix_users:
+  - "@youruser:example.com"
