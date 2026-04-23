@@ -435,7 +435,7 @@ async def handle_command(sender: str, cmd: str, args: str) -> None:
 
         try:
             with open(PLAYLIST_FILE) as f:
-                playlist_lines = [l.strip() for l in f if l.strip()]
+                playlist_lines = [ln.strip() for ln in f if ln.strip()]
             if current_filename and current_filename in playlist_lines:
                 idx = playlist_lines.index(current_filename)
                 upcoming = playlist_lines[idx + 1:idx + 6]
@@ -458,7 +458,7 @@ async def handle_command(sender: str, cmd: str, args: str) -> None:
             lines.append("Plex (play only):\n" + "\n".join(f"  {p}" for p in plex_pls))
         if shared:
             lines.append("Shared (anyone can edit):\n" + "\n".join(
-                f"  {k}  ({len(v.get('tracks', []))} tracks, created by {v.get('created_by','?').split(':')[0].lstrip('@')})"
+                f"  {k}  ({len(v.get('tracks', []))} tracks, created by {v.get('created_by', '?').split(':')[0].lstrip('@')})"
                 for k, v in shared.items()
             ))
         await bot.send_message("\n".join(lines) if lines else "No playlists found.")
@@ -791,7 +791,7 @@ async def track_changed(
     try:
         candidates = plex.search_tracks(title, limit=10)
         if candidates:
-            norm = lambda s: s.lower().replace(" ", "").replace("-", "")
+            def norm(s): return s.lower().replace(" ", "").replace("-", "")
             artist_norm = norm(artist)
             match = next(
                 (t for t in candidates if norm(t["artist"]) in artist_norm or artist_norm in norm(t["artist"])),

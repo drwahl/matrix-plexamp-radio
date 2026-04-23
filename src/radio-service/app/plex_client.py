@@ -44,7 +44,7 @@ class PlexClient:
         results = self._music.search(query, libtype="track", maxresults=fetch)
         tracks = [self._track_to_dict(t) for t in results]
         if artist_filter:
-            norm = lambda s: s.lower().replace(" ", "")
+            def norm(s): return s.lower().replace(" ", "")
             af = norm(artist_filter)
             tracks = [t for t in tracks if af in norm(t["artist"]) or norm(t["artist"]) in af]
         return tracks[:limit]
@@ -53,7 +53,8 @@ class PlexClient:
         results = self._music.search(artist_name, libtype="artist", maxresults=5)
         if not results:
             return None
-        norm = lambda s: s.lower().strip()
+
+        def norm(s): return s.lower().strip()
         an = norm(artist_name)
         artist = next((a for a in results if norm(a.title) == an), results[0])
         tracks = artist.tracks()

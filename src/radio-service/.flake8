@@ -1,0 +1,10 @@
+[flake8]
+max-line-length = 100
+extend-ignore =
+    # whitespace before ':'  (conflicts with black/autopep8 slice formatting)
+    E203,
+    # line too long — handled by autopep8
+    E501,
+per-file-ignores =
+    # test files: allow unused imports (noqa: F401 used explicitly, but broader F811 ok too)
+    tests/*:F811

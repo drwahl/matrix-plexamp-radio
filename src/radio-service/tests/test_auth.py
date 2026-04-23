@@ -4,9 +4,7 @@ import hashlib
 import hmac
 import time
 
-import pytest
-
-from app.auth import SESSION_DURATION, make_token, verify_token, load_or_create_secret
+from app.auth import make_token, verify_token, load_or_create_secret
 
 
 def test_roundtrip():
