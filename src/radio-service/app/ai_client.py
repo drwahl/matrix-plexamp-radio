@@ -161,6 +161,8 @@ class AIClient:
                 messages=messages,
                 tools=RADIO_TOOLS,
                 max_tokens=512,
+                timeout=30,
+                num_retries=0,
                 **self._extra,
             )
 
@@ -191,6 +193,8 @@ class AIClient:
                     messages=messages,
                     tools=RADIO_TOOLS,
                     max_tokens=512,
+                    timeout=30,
+                    num_retries=0,
                     **self._extra,
                 )
 

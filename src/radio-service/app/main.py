@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 import random
 from contextlib import asynccontextmanager
@@ -23,6 +24,8 @@ logger = logging.getLogger(__name__)
 
 PLAYLIST_FILE = "/data/background.m3u"
 MODE_FILE = "/data/mode"
+USER_PLAYLISTS_FILE = "/data/user_playlists.json"
+SHARED_PLAYLISTS_FILE = "/data/shared_playlists.json"
 MAX_PLAYLIST_TRACKS = 1500  # Liquidsoap's OCaml List.map blows the stack on very large playlists
 
 LOGIN_HTML = (Path(__file__).parent.parent / "web" / "login.html").read_text()
@@ -87,6 +90,57 @@ def load_mode() -> str:
             return f.read().strip()
     except FileNotFoundError:
         return ""
+
+
+def _load_user_playlists() -> dict:
+    try:
+        with open(USER_PLAYLISTS_FILE) as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+
+def _save_user_playlists(data: dict) -> None:
+    with open(USER_PLAYLISTS_FILE, "w") as f:
+        json.dump(data, f)
+
+
+def _session_user(request: Request) -> str | None:
+    token = request.cookies.get(auth.COOKIE_NAME)
+    return auth.verify_token(token, _secret) if token else None
+
+
+def _load_shared_playlists() -> dict:
+    try:
+        with open(SHARED_PLAYLISTS_FILE) as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+
+def _save_shared_playlists(data: dict) -> None:
+    with open(SHARED_PLAYLISTS_FILE, "w") as f:
+        json.dump(data, f)
+
+
+def _find_shared(name: str, shared: dict) -> str | None:
+    """Case-insensitive key lookup into the shared playlists dict."""
+    return next((k for k in shared if k.lower() == name.lower()), None)
+
+
+def _sync_to_plex(name: str, tracks: list[dict]) -> None:
+    """Fire-and-forget Plex mirror sync — logs on failure, never raises."""
+    try:
+        plex.sync_shared_playlist_to_plex(name, tracks)
+    except Exception:
+        logger.warning("Plex sync failed for shared playlist %r", name)
+
+
+def _delete_from_plex(name: str) -> None:
+    try:
+        plex.delete_plex_playlist(name)
+    except Exception:
+        logger.warning("Plex delete failed for shared playlist %r", name)
 
 
 async def _ai_tool_handler(name: str, inputs: dict) -> str:
@@ -263,20 +317,42 @@ async def handle_command(sender: str, cmd: str, args: str) -> None:
 
     elif cmd == "!playlist":
         if not args:
-            playlists = plex.list_playlists()
-            await bot.send_message("Available playlists: " + (", ".join(playlists) or "none"))
+            plex_pls = plex.list_playlists()
+            shared = _load_shared_playlists()
+            lines = []
+            if plex_pls:
+                lines.append("Plex (play only): " + ", ".join(plex_pls))
+            if shared:
+                lines.append("Shared: " + ", ".join(
+                    f"{k} ({len(v.get('tracks', []))})" for k, v in shared.items()
+                ))
+            await bot.send_message("\n".join(lines) if lines else "No playlists found.")
+            return
+        # Check shared playlists first, then Plex
+        shared = _load_shared_playlists()
+        match = _find_shared(args, shared)
+        if match:
+            tracks = [t["path"] for t in shared[match].get("tracks", [])]
+            if not tracks:
+                await bot.send_message(f"Shared playlist '{match}' is empty.")
+                return
+            random.shuffle(tracks)
+            write_playlist(tracks)
+            set_mode(f"shared:{match}")
+            await bot.send_message(f"Switched to shared playlist: {match} ({len(tracks)} tracks)")
             return
         tracks = plex.get_playlist_tracks(args)
         if not tracks:
-            playlists = plex.list_playlists()
+            plex_pls = plex.list_playlists()
+            all_names = list(shared.keys()) + plex_pls
             await bot.send_message(
-                f"Playlist '{args}' not found.\nAvailable: " + (", ".join(playlists) or "none")
+                f"Playlist '{args}' not found.\nAvailable: " + (", ".join(all_names) or "none")
             )
             return
         random.shuffle(tracks)
         write_playlist(tracks)
         set_mode(f"playlist:{args}")
-        await bot.send_message(f"Switched to playlist: {args} ({len(tracks)} tracks)")
+        await bot.send_message(f"Switched to Plex playlist: {args} ({len(tracks)} tracks)")
 
     elif cmd == "!similar":
         if lastfm is None:
@@ -372,8 +448,197 @@ async def handle_command(sender: str, cmd: str, args: str) -> None:
         await bot.send_message("\n".join(lines) if lines else "Queue is empty.")
 
     elif cmd == "!playlists":
-        playlists = plex.list_playlists()
-        await bot.send_message("Playlists: " + (", ".join(playlists) or "none"))
+        plex_pls = plex.list_playlists()
+        shared = _load_shared_playlists()
+        lines = []
+        if plex_pls:
+            lines.append("Plex (play only):\n" + "\n".join(f"  {p}" for p in plex_pls))
+        if shared:
+            lines.append("Shared (anyone can edit):\n" + "\n".join(
+                f"  {k}  ({len(v.get('tracks', []))} tracks, created by {v.get('created_by','?').split(':')[0].lstrip('@')})"
+                for k, v in shared.items()
+            ))
+        await bot.send_message("\n".join(lines) if lines else "No playlists found.")
+
+    elif cmd == "!createplaylist":
+        if not args or " " in args.strip():
+            await bot.send_message("Usage: !createplaylist <name>  (no spaces in name)")
+            return
+        name = args.strip()
+        shared = _load_shared_playlists()
+        if _find_shared(name, shared):
+            await bot.send_message(f"Shared playlist '{name}' already exists.")
+            return
+        if name.lower() in [p.lower() for p in plex.list_playlists()]:
+            await bot.send_message(f"'{name}' conflicts with a Plex playlist name — choose another.")
+            return
+        shared[name] = {"created_by": sender, "tracks": []}
+        _save_shared_playlists(shared)
+        await bot.send_message(f"Created shared playlist: {name}")
+
+    elif cmd == "!addto":
+        parts_a = args.split(None, 1) if args else []
+        if len(parts_a) < 2:
+            await bot.send_message("Usage: !addto <playlist> <track query>")
+            return
+        pl_name, track_query = parts_a
+        shared = _load_shared_playlists()
+        match = _find_shared(pl_name, shared)
+        if not match:
+            await bot.send_message(f"Shared playlist '{pl_name}' not found. Use !createplaylist to make one.")
+            return
+        artist_hint, title_query = _parse_request_query(track_query)
+        if artist_hint and title_query:
+            results = plex.search_tracks(title_query, artist_filter=artist_hint)
+        else:
+            results = plex.search_tracks(track_query, limit=1)
+        if not results:
+            await bot.send_message(f"No tracks found: {track_query}")
+            return
+        track = results[0]
+        tracks = shared[match].setdefault("tracks", [])
+        if any(t["path"] == track["path"] for t in tracks):
+            await bot.send_message(f"Already in '{match}': {track['artist']} — {track['title']}")
+            return
+        tracks.append(track)
+        _save_shared_playlists(shared)
+        _sync_to_plex(match, tracks)
+        await bot.send_message(
+            f"Added to '{match}': {track['artist']} — {track['title']} ({len(tracks)} tracks total)"
+        )
+
+    elif cmd == "!removefrom":
+        parts_r = args.split(None, 1) if args else []
+        if len(parts_r) < 2:
+            await bot.send_message("Usage: !removefrom <playlist> <track number>")
+            return
+        pl_name, num_str = parts_r
+        shared = _load_shared_playlists()
+        match = _find_shared(pl_name, shared)
+        if not match:
+            await bot.send_message(f"Shared playlist '{pl_name}' not found.")
+            return
+        tracks = shared[match].get("tracks", [])
+        try:
+            idx = int(num_str) - 1
+            if idx < 0 or idx >= len(tracks):
+                await bot.send_message(f"Invalid number — '{match}' has {len(tracks)} tracks.")
+                return
+            removed = tracks.pop(idx)
+            _save_shared_playlists(shared)
+            _sync_to_plex(match, tracks)
+            await bot.send_message(f"Removed from '{match}': {removed['artist']} — {removed['title']}")
+        except ValueError:
+            await bot.send_message("Usage: !removefrom <playlist> <track number>")
+
+    elif cmd == "!showplaylist":
+        if not args:
+            await bot.send_message("Usage: !showplaylist <name>")
+            return
+        shared = _load_shared_playlists()
+        match = _find_shared(args, shared)
+        if not match:
+            await bot.send_message(f"Shared playlist '{args}' not found.")
+            return
+        tracks = shared[match].get("tracks", [])
+        if not tracks:
+            await bot.send_message(f"'{match}' is empty.")
+            return
+        lines = [f"Shared playlist: {match} ({len(tracks)} tracks)"]
+        for i, t in enumerate(tracks[:20], 1):
+            lines.append(f"  {i}. {t['artist']} — {t['title']}")
+        if len(tracks) > 20:
+            lines.append(f"  … and {len(tracks) - 20} more")
+        await bot.send_message("\n".join(lines))
+
+    elif cmd == "!deleteplaylist":
+        if not args:
+            await bot.send_message("Usage: !deleteplaylist <name>")
+            return
+        shared = _load_shared_playlists()
+        match = _find_shared(args, shared)
+        if not match:
+            await bot.send_message(f"Shared playlist '{args}' not found.")
+            return
+        del shared[match]
+        _save_shared_playlists(shared)
+        _delete_from_plex(match)
+        await bot.send_message(f"Deleted shared playlist: {match}")
+
+    elif cmd == "!save":
+        if not args:
+            await bot.send_message("Usage: !save <track or artist - title>")
+            return
+        artist_hint, title_query = _parse_request_query(args)
+        if artist_hint and title_query:
+            results = plex.search_tracks(title_query, artist_filter=artist_hint)
+        else:
+            results = plex.search_tracks(args, limit=1)
+        if not results:
+            await bot.send_message(f"No tracks found: {args}")
+            return
+        track = results[0]
+        playlists = _load_user_playlists()
+        tracks = playlists.setdefault(sender, [])
+        if any(t["path"] == track["path"] for t in tracks):
+            await bot.send_message(f"Already in your playlist: {track['artist']} — {track['title']}")
+            return
+        tracks.append(track)
+        _save_user_playlists(playlists)
+        await bot.send_message(
+            f"Saved to your playlist: {track['artist']} — {track['title']} ({len(tracks)} tracks total)"
+        )
+
+    elif cmd == "!mylist":
+        playlists = _load_user_playlists()
+        tracks = playlists.get(sender, [])
+        sub = args.split(None, 1) if args else []
+        subcmd = sub[0].lower() if sub else ""
+        subargs = sub[1].strip() if len(sub) > 1 else ""
+
+        if not subcmd:
+            if not tracks:
+                await bot.send_message("Your playlist is empty. Use !save <track> to add tracks.")
+                return
+            lines = [f"Your playlist ({len(tracks)} tracks):"]
+            for i, t in enumerate(tracks[:20], 1):
+                lines.append(f"  {i}. {t['artist']} — {t['title']}")
+            if len(tracks) > 20:
+                lines.append(f"  … and {len(tracks) - 20} more")
+            await bot.send_message("\n".join(lines))
+
+        elif subcmd == "play":
+            if not tracks:
+                await bot.send_message("Your playlist is empty.")
+                return
+            paths = [t["path"] for t in tracks]
+            random.shuffle(paths)
+            write_playlist(paths)
+            set_mode(f"user:{sender}")
+            await bot.send_message(f"Playing your playlist ({len(paths)} tracks)")
+
+        elif subcmd == "clear":
+            playlists[sender] = []
+            _save_user_playlists(playlists)
+            await bot.send_message("Your playlist cleared.")
+
+        elif subcmd == "remove":
+            if not subargs:
+                await bot.send_message("Usage: !mylist remove <number>")
+                return
+            try:
+                idx = int(subargs) - 1
+                if idx < 0 or idx >= len(tracks):
+                    await bot.send_message(f"Invalid number — your playlist has {len(tracks)} tracks.")
+                    return
+                removed = tracks.pop(idx)
+                _save_user_playlists(playlists)
+                await bot.send_message(f"Removed: {removed['artist']} — {removed['title']}")
+            except ValueError:
+                await bot.send_message("Usage: !mylist remove <number>")
+
+        else:
+            await bot.send_message("Usage: !mylist [play|clear|remove <N>]")
 
     elif cmd == "!help":
         await bot.send_message(HELP_TEXT)
@@ -381,20 +646,33 @@ async def handle_command(sender: str, cmd: str, args: str) -> None:
 
 HELP_TEXT = (
     "Commands:\n"
-    "  !np / !playing        — now playing\n"
-    "  !request / !play      — queue a track\n"
-    "  !skip / !next         — skip current track\n"
-    "  !queue                — show upcoming tracks\n"
-    "  !playlist <name>      — switch to Plex playlist\n"
-    "  !similar <artist>     — smart radio similar to artist\n"
-    "  !genre <genre>        — play by genre\n"
-    "  !random / !shuffle    — shuffle full library\n"
-    "  !start                — start playback (random shuffle)\n"
-    "  !stop                 — stop playback\n"
-    "  !playlists            — list Plex playlists\n"
-    "  !mode                 — show current mode\n"
-    "  !help                 — show this message\n"
-    + ("  Or just @-mention me and chat!" if ai else "")
+    "  !np / !playing           — now playing\n"
+    "  !request / !play         — queue a track (one-shot)\n"
+    "  !skip / !next            — skip current track\n"
+    "  !queue                   — show upcoming tracks\n"
+    "  !random / !shuffle       — shuffle full library\n"
+    "  !genre <genre>           — play by genre\n"
+    "  !similar <artist>        — smart radio similar to artist\n"
+    "  !start / !stop           — start or stop playback\n"
+    "  !mode                    — show current mode\n"
+    "\nPlaylists:\n"
+    "  !playlist                — list all playlists\n"
+    "  !playlist <name>         — play a playlist (Plex or shared)\n"
+    "  !playlists               — detailed list with types\n"
+    "\nShared playlists (anyone can edit):\n"
+    "  !createplaylist <name>   — create a new shared playlist\n"
+    "  !showplaylist <name>     — list tracks in a shared playlist\n"
+    "  !addto <name> <track>    — add a track to shared playlist\n"
+    "  !removefrom <name> <N>   — remove track N from shared playlist\n"
+    "  !deleteplaylist <name>   — delete a shared playlist\n"
+    "\nYour personal playlist:\n"
+    "  !save <track>            — save track to your playlist\n"
+    "  !mylist                  — show your playlist\n"
+    "  !mylist play             — play your playlist\n"
+    "  !mylist clear            — clear your playlist\n"
+    "  !mylist remove <N>       — remove track N\n"
+    "\n  !help                  — show this message\n"
+    + ("  Or just @-mention me to chat!" if ai else "")
 )
 
 bot.command_handler = handle_command
@@ -445,7 +723,7 @@ app = FastAPI(lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_methods=["GET", "POST"],
+    allow_methods=["GET", "POST", "DELETE"],
     allow_headers=["*"],
 )
 
@@ -531,6 +809,221 @@ async def track_changed(
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
+
+@app.get("/api/search")
+async def search_library(q: str = "") -> dict:
+    if len(q) < 2:
+        return {"tracks": [], "artists": [], "playlists": []}
+    tracks = plex.search_tracks(q, limit=10)
+    artists = plex.search_artists(q, limit=5)
+    ql = q.lower()
+    playlists: list[dict] = [
+        {"name": p, "type": "plex"}
+        for p in plex.list_playlists() if ql in p.lower()
+    ]
+    shared = _load_shared_playlists()
+    playlists += [
+        {"name": k, "type": "shared", "count": len(v.get("tracks", []))}
+        for k, v in shared.items() if ql in k.lower()
+    ]
+    return {"tracks": tracks, "artists": artists, "playlists": playlists}
+
+
+@app.get("/api/shared-playlists")
+async def get_shared_playlists() -> dict:
+    shared = _load_shared_playlists()
+    return {
+        "playlists": [
+            {
+                "name": k,
+                "created_by": v.get("created_by", ""),
+                "tracks": v.get("tracks", []),
+                "count": len(v.get("tracks", [])),
+            }
+            for k, v in shared.items()
+        ]
+    }
+
+
+@app.post("/api/shared-playlists")
+async def create_shared_playlist(request: Request, name: str = Form(...)) -> dict:
+    if not name or " " in name:
+        return {"ok": False, "error": "Name cannot be empty or contain spaces"}
+    user_id = _session_user(request)
+    if not user_id:
+        return Response(status_code=401)
+    shared = _load_shared_playlists()
+    if _find_shared(name, shared):
+        return {"ok": False, "error": "Already exists"}
+    shared[name] = {"created_by": user_id, "tracks": []}
+    _save_shared_playlists(shared)
+    return {"ok": True}
+
+
+@app.post("/api/shared-playlists/{name}/add")
+async def add_to_shared_playlist(
+    name: str,
+    request: Request,
+    path: str = Form(...),
+    title: str = Form(default=""),
+    artist: str = Form(default=""),
+    album: str = Form(default=""),
+    key: str = Form(default=""),
+) -> dict:
+    if not _session_user(request):
+        return Response(status_code=401)
+    shared = _load_shared_playlists()
+    match = _find_shared(name, shared)
+    if not match:
+        return {"ok": False, "error": "Playlist not found"}
+    tracks = shared[match].setdefault("tracks", [])
+    if not any(t["path"] == path for t in tracks):
+        track: dict = {"title": title, "artist": artist, "album": album, "path": path}
+        if key:
+            track["key"] = key
+        tracks.append(track)
+        _save_shared_playlists(shared)
+        _sync_to_plex(match, tracks)
+    return {"ok": True, "count": len(tracks)}
+
+
+@app.post("/api/shared-playlists/{name}/remove")
+async def remove_from_shared_playlist(
+    name: str, request: Request, path: str = Form(...)
+) -> dict:
+    if not _session_user(request):
+        return Response(status_code=401)
+    shared = _load_shared_playlists()
+    match = _find_shared(name, shared)
+    if not match:
+        return {"ok": False, "error": "Playlist not found"}
+    shared[match]["tracks"] = [t for t in shared[match].get("tracks", []) if t["path"] != path]
+    _save_shared_playlists(shared)
+    _sync_to_plex(match, shared[match]["tracks"])
+    return {"ok": True}
+
+
+@app.delete("/api/shared-playlists/{name}")
+async def delete_shared_playlist(name: str, request: Request) -> dict:
+    if not _session_user(request):
+        return Response(status_code=401)
+    shared = _load_shared_playlists()
+    match = _find_shared(name, shared)
+    if not match:
+        return {"ok": False, "error": "Playlist not found"}
+    del shared[match]
+    _save_shared_playlists(shared)
+    _delete_from_plex(match)
+    return {"ok": True}
+
+
+@app.post("/api/queue-track")
+async def queue_track(path: str = Form(...)) -> dict:
+    ok = await liquidsoap.push_request(path)
+    return {"ok": ok}
+
+
+@app.post("/api/set-mode")
+async def set_mode_api(mode_type: str = Form(...), name: str = Form(default="")) -> dict:
+    if mode_type == "playlist":
+        tracks = plex.get_playlist_tracks(name)
+        if not tracks:
+            return {"ok": False, "error": "Playlist not found"}
+        random.shuffle(tracks)
+        write_playlist(tracks)
+        set_mode(f"playlist:{name}")
+    elif mode_type == "artist":
+        tracks = plex.get_tracks_by_artist(name)
+        if not tracks:
+            return {"ok": False, "error": "No tracks found for artist"}
+        random.shuffle(tracks)
+        write_playlist(tracks)
+        set_mode(f"artist:{name}")
+    elif mode_type == "shared":
+        shared = _load_shared_playlists()
+        match = _find_shared(name, shared)
+        if not match:
+            return {"ok": False, "error": "Shared playlist not found"}
+        tracks = [t["path"] for t in shared[match].get("tracks", [])]
+        if not tracks:
+            return {"ok": False, "error": "Shared playlist is empty"}
+        random.shuffle(tracks)
+        write_playlist(tracks)
+        set_mode(f"shared:{match}")
+    elif mode_type == "random":
+        tracks = plex.get_all_tracks()
+        random.shuffle(tracks)
+        write_playlist(tracks)
+        set_mode("random")
+    else:
+        return {"ok": False, "error": "Unknown mode type"}
+    return {"ok": True}
+
+
+@app.get("/api/my-playlist")
+async def get_my_playlist(request: Request) -> dict:
+    user_id = _session_user(request)
+    if not user_id:
+        return Response(status_code=401)
+    return {"tracks": _load_user_playlists().get(user_id, [])}
+
+
+@app.post("/api/my-playlist/add")
+async def add_to_my_playlist(
+    request: Request,
+    path: str = Form(...),
+    title: str = Form(default=""),
+    artist: str = Form(default=""),
+    album: str = Form(default=""),
+) -> dict:
+    user_id = _session_user(request)
+    if not user_id:
+        return Response(status_code=401)
+    playlists = _load_user_playlists()
+    tracks = playlists.setdefault(user_id, [])
+    if not any(t["path"] == path for t in tracks):
+        tracks.append({"title": title, "artist": artist, "album": album, "path": path})
+        _save_user_playlists(playlists)
+    return {"ok": True, "count": len(tracks)}
+
+
+@app.post("/api/my-playlist/remove")
+async def remove_from_my_playlist(request: Request, path: str = Form(...)) -> dict:
+    user_id = _session_user(request)
+    if not user_id:
+        return Response(status_code=401)
+    playlists = _load_user_playlists()
+    if user_id in playlists:
+        playlists[user_id] = [t for t in playlists[user_id] if t["path"] != path]
+        _save_user_playlists(playlists)
+    return {"ok": True}
+
+
+@app.post("/api/my-playlist/play")
+async def play_my_playlist(request: Request) -> dict:
+    user_id = _session_user(request)
+    if not user_id:
+        return Response(status_code=401)
+    tracks = _load_user_playlists().get(user_id, [])
+    if not tracks:
+        return {"ok": False, "error": "Your playlist is empty"}
+    paths = [t["path"] for t in tracks]
+    random.shuffle(paths)
+    write_playlist(paths)
+    set_mode(f"user:{user_id}")
+    return {"ok": True, "count": len(paths)}
+
+
+@app.post("/api/my-playlist/clear")
+async def clear_my_playlist(request: Request) -> dict:
+    user_id = _session_user(request)
+    if not user_id:
+        return Response(status_code=401)
+    playlists = _load_user_playlists()
+    playlists[user_id] = []
+    _save_user_playlists(playlists)
+    return {"ok": True}
+
 
 @app.get("/api/now-playing")
 async def get_now_playing() -> NowPlaying:

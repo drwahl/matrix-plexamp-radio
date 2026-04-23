@@ -41,9 +41,9 @@ class MatrixBot:
         if artist:
             lines.append(f"Artist: {artist}")
         if title:
-            lines.append(f"Track:  {title}")
+            lines.append(f"Track: {title}")
         if album:
-            lines.append(f"Album:  {album}")
+            lines.append(f"Album: {album}")
         await self.send_message("\n".join(lines))
 
     async def run(self) -> None:
@@ -80,7 +80,14 @@ class MatrixBot:
             args = parts[1].strip() if len(parts) > 1 else ""
             await self.command_handler(event.sender, cmd, args)
         elif self.ai_handler and self._mentions_bot(body):
-            await self.ai_handler(event.sender, body)
+            # Run off the sync loop so a slow/hanging AI call never blocks commands
+            asyncio.create_task(self._run_ai(event.sender, body))
+
+    async def _run_ai(self, sender: str, body: str) -> None:
+        try:
+            await self.ai_handler(sender, body)
+        except Exception:
+            logger.exception("AI handler raised an unhandled exception")
 
     async def _on_member_event(self, room: MatrixRoom, event: RoomMemberEvent) -> None:
         if room.room_id != self.room_id:

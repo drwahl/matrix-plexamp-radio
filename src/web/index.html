@@ -101,6 +101,223 @@
       color: #555;
       letter-spacing: 0.05em;
     }
+
+    #search-section {
+      width: 100%;
+      max-width: 320px;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    #search-input {
+      width: 100%;
+      padding: 0.55rem 0.8rem;
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 8px;
+      color: #eee;
+      font-size: 0.9rem;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    #search-input:focus { border-color: #1db954; }
+    #search-input::placeholder { color: #444; }
+
+    #search-results {
+      max-height: 320px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 0.2rem;
+    }
+
+    .result-section { display: flex; flex-direction: column; gap: 0.2rem; }
+
+    .result-header {
+      font-size: 0.65rem;
+      color: #555;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      padding: 0.6rem 0 0.15rem;
+    }
+
+    .result-item {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      padding: 0.4rem 0.6rem;
+      background: rgba(255,255,255,0.04);
+      border-radius: 6px;
+    }
+
+    .result-info {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .result-title {
+      font-size: 0.85rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .result-sub {
+      font-size: 0.72rem;
+      color: #777;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .result-btn {
+      flex-shrink: 0;
+      padding: 0.2rem 0.55rem;
+      background: transparent;
+      border: 1px solid #1db954;
+      border-radius: 4px;
+      color: #1db954;
+      font-size: 0.72rem;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+    .result-btn:hover { background: #1db954; color: #000; }
+    .result-btn.busy { border-color: #555; color: #555; cursor: default; pointer-events: none; }
+    .result-btn.done { border-color: #555; color: #555; cursor: default; pointer-events: none; }
+
+    .no-results { font-size: 0.82rem; color: #555; text-align: center; padding: 0.8rem 0; }
+
+    #mylist-section {
+      width: 100%;
+      max-width: 320px;
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+
+    #mylist-header {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    #mylist-label {
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: #666;
+      flex: 1;
+    }
+
+    #mylist-count { font-size: 0.72rem; color: #555; }
+
+    .mylist-ctrl {
+      padding: 0.18rem 0.5rem;
+      background: transparent;
+      border: 1px solid #333;
+      border-radius: 4px;
+      color: #777;
+      font-size: 0.7rem;
+      cursor: pointer;
+      transition: border-color 0.15s, color 0.15s;
+    }
+    .mylist-ctrl:hover { border-color: #1db954; color: #1db954; }
+    .mylist-ctrl.danger:hover { border-color: #c0392b; color: #c0392b; }
+
+    #mylist-tracks {
+      max-height: 240px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 0.2rem;
+    }
+
+    .mylist-empty { font-size: 0.8rem; color: #444; text-align: center; padding: 0.5rem 0; }
+
+    #shared-section {
+      width: 100%;
+      max-width: 320px;
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+
+    #shared-header {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    #shared-label {
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: #666;
+      flex: 1;
+    }
+
+    .shared-pl {
+      background: rgba(255,255,255,0.04);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+
+    .shared-pl-header {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.4rem 0.6rem;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .shared-pl-header:hover { background: rgba(255,255,255,0.04); }
+
+    .shared-pl-name { flex: 1; font-size: 0.85rem; }
+    .shared-pl-meta { font-size: 0.7rem; color: #555; }
+
+    .shared-pl-tracks {
+      display: none;
+      flex-direction: column;
+      gap: 0.15rem;
+      padding: 0 0.4rem 0.4rem;
+      border-top: 1px solid rgba(255,255,255,0.06);
+    }
+
+    .shared-pl-tracks.open { display: flex; }
+
+    .shared-pl-footer {
+      display: flex;
+      gap: 0.4rem;
+      padding: 0.3rem 0.6rem;
+      border-top: 1px solid rgba(255,255,255,0.04);
+    }
+
+    .shared-new-row {
+      display: flex;
+      gap: 0.4rem;
+    }
+
+    #shared-new-name {
+      flex: 1;
+      padding: 0.4rem 0.6rem;
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 6px;
+      color: #eee;
+      font-size: 0.82rem;
+      font-family: inherit;
+      outline: none;
+    }
+
+    #shared-new-name:focus { border-color: #1db954; }
+    #shared-new-name::placeholder { color: #444; }
   </style>
 </head>
 <body>
@@ -123,6 +340,32 @@
       <span>🔊</span>
     </div>
     <div id="status">stopped</div>
+  </div>
+
+  <div id="search-section">
+    <input id="search-input" type="text" placeholder="Search tracks, artists, playlists…" autocomplete="off" spellcheck="false">
+    <div id="search-results"></div>
+  </div>
+
+  <div id="mylist-section">
+    <div id="mylist-header">
+      <span id="mylist-label">My Playlist</span>
+      <span id="mylist-count"></span>
+      <button class="mylist-ctrl" id="mylist-play-btn">Play</button>
+      <button class="mylist-ctrl danger" id="mylist-clear-btn">Clear</button>
+    </div>
+    <div id="mylist-tracks"><div class="mylist-empty">No saved tracks</div></div>
+  </div>
+
+  <div id="shared-section">
+    <div id="shared-header">
+      <span id="shared-label">Shared Playlists</span>
+    </div>
+    <div id="shared-list"></div>
+    <div class="shared-new-row">
+      <input id="shared-new-name" type="text" placeholder="New playlist name…" autocomplete="off" spellcheck="false">
+      <button class="mylist-ctrl" id="shared-create-btn">Create</button>
+    </div>
   </div>
 
   <audio id="player">
@@ -212,6 +455,262 @@
     }
     updateNowPlaying();
     setInterval(updateNowPlaying, 5000);
+
+    // Search
+    const searchInput   = document.getElementById('search-input');
+    const searchResults = document.getElementById('search-results');
+    let searchTimer = null;
+
+    function esc(s) {
+      return String(s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function renderResults(data) {
+      const parts = [];
+
+      if (data.tracks.length) {
+        const rows = data.tracks.map(t =>
+          `<div class="result-item">
+            <div class="result-info">
+              <span class="result-title">${esc(t.title)}</span>
+              <span class="result-sub">${esc(t.artist)}${t.album ? ' · ' + esc(t.album) : ''}</span>
+            </div>
+            <button class="result-btn" data-action="queue" data-value="${esc(t.path)}">Queue</button>
+            <button class="result-btn" data-action="save" data-value="${esc(t.path)}" data-title="${esc(t.title)}" data-artist="${esc(t.artist)}" data-album="${esc(t.album)}" data-key="${esc(t.key||'')}">Save</button>
+          </div>`
+        ).join('');
+        parts.push(`<div class="result-section"><div class="result-header">Tracks</div>${rows}</div>`);
+      }
+
+      if (data.artists.length) {
+        const rows = data.artists.map(a =>
+          `<div class="result-item">
+            <div class="result-info"><span class="result-title">${esc(a.name)}</span></div>
+            <button class="result-btn" data-action="artist" data-value="${esc(a.name)}">Play</button>
+          </div>`
+        ).join('');
+        parts.push(`<div class="result-section"><div class="result-header">Artists</div>${rows}</div>`);
+      }
+
+      if (data.playlists.length) {
+        const rows = data.playlists.map(p =>
+          `<div class="result-item">
+            <div class="result-info">
+              <span class="result-title">${esc(p.name)}</span>
+              <span class="result-sub">${p.type === 'shared' ? `shared · ${p.count} tracks` : 'plex'}</span>
+            </div>
+            <button class="result-btn" data-action="${esc(p.type)}" data-value="${esc(p.name)}">Play</button>
+          </div>`
+        ).join('');
+        parts.push(`<div class="result-section"><div class="result-header">Playlists</div>${rows}</div>`);
+      }
+
+      searchResults.innerHTML = parts.length
+        ? parts.join('')
+        : '<div class="no-results">No results</div>';
+    }
+
+    async function doSearch(q) {
+      if (q.length < 2) { searchResults.innerHTML = ''; return; }
+      try {
+        const r = await fetch('/api/search?q=' + encodeURIComponent(q));
+        if (r.ok) renderResults(await r.json());
+      } catch (_) {}
+    }
+
+    searchInput.addEventListener('input', () => {
+      clearTimeout(searchTimer);
+      const q = searchInput.value.trim();
+      if (!q) { searchResults.innerHTML = ''; return; }
+      searchTimer = setTimeout(() => doSearch(q), 300);
+    });
+
+    async function handleResultBtn(btn) {
+      if (!btn || btn.classList.contains('busy') || btn.classList.contains('done')) return;
+      const { action, value } = btn.dataset;
+      btn.classList.add('busy');
+      btn.textContent = '…';
+      try {
+        const fd = new FormData();
+        let url = '';
+        if (action === 'queue') {
+          fd.append('path', value);
+          url = '/api/queue-track';
+        } else if (action === 'save') {
+          fd.append('path', value);
+          fd.append('title', btn.dataset.title || '');
+          fd.append('artist', btn.dataset.artist || '');
+          fd.append('album', btn.dataset.album || '');
+          if (btn.dataset.key) fd.append('key', btn.dataset.key);
+          url = '/api/my-playlist/add';
+        } else if (action === 'mylist-remove') {
+          fd.append('path', value);
+          url = '/api/my-playlist/remove';
+        } else {
+          fd.append('mode_type', action);
+          fd.append('name', value);
+          url = '/api/set-mode';
+        }
+        const r = await fetch(url, { method: 'POST', body: fd });
+        const data = await r.json();
+        if (data.ok) {
+          if (action === 'queue') { btn.textContent = 'Queued!'; btn.classList.replace('busy', 'done'); }
+          else if (action === 'save') { btn.textContent = 'Saved!'; btn.classList.replace('busy', 'done'); loadMyPlaylist(); }
+          else if (action === 'mylist-remove') loadMyPlaylist();
+          else { btn.textContent = 'Playing'; btn.classList.replace('busy', 'done'); }
+        } else {
+          btn.textContent = 'Error'; btn.classList.replace('busy', 'done');
+        }
+      } catch (_) {
+        btn.textContent = 'Error'; btn.classList.replace('busy', 'done');
+      }
+    }
+
+    searchResults.addEventListener('click', e => handleResultBtn(e.target.closest('.result-btn')));
+
+    // My Playlist
+    const mylistTracks = document.getElementById('mylist-tracks');
+    const mylistCount  = document.getElementById('mylist-count');
+
+    function renderMyPlaylist(tracks) {
+      mylistCount.textContent = tracks.length ? `${tracks.length} tracks` : '';
+      if (!tracks.length) {
+        mylistTracks.innerHTML = '<div class="mylist-empty">No saved tracks</div>';
+        return;
+      }
+      mylistTracks.innerHTML = tracks.map(t =>
+        `<div class="result-item">
+          <div class="result-info">
+            <span class="result-title">${esc(t.title)}</span>
+            <span class="result-sub">${esc(t.artist)}</span>
+          </div>
+          <button class="result-btn" data-action="queue" data-value="${esc(t.path)}">Queue</button>
+          <button class="result-btn" data-action="mylist-remove" data-value="${esc(t.path)}">✕</button>
+        </div>`
+      ).join('');
+    }
+
+    async function loadMyPlaylist() {
+      try {
+        const r = await fetch('/api/my-playlist');
+        if (r.ok) renderMyPlaylist((await r.json()).tracks);
+      } catch (_) {}
+    }
+
+    mylistTracks.addEventListener('click', e => handleResultBtn(e.target.closest('.result-btn')));
+
+    document.getElementById('mylist-play-btn').addEventListener('click', async () => {
+      const r = await fetch('/api/my-playlist/play', { method: 'POST' });
+      const data = await r.json();
+      const btn = document.getElementById('mylist-play-btn');
+      btn.textContent = data.ok ? 'Playing!' : 'Empty';
+      setTimeout(() => { btn.textContent = 'Play'; }, 2000);
+    });
+
+    document.getElementById('mylist-clear-btn').addEventListener('click', async () => {
+      if (!confirm('Clear your playlist?')) return;
+      await fetch('/api/my-playlist/clear', { method: 'POST' });
+      renderMyPlaylist([]);
+    });
+
+    loadMyPlaylist();
+
+    // Shared Playlists
+    const sharedList = document.getElementById('shared-list');
+
+    function renderSharedPlaylists(playlists) {
+      if (!playlists.length) {
+        sharedList.innerHTML = '<div class="mylist-empty">No shared playlists yet</div>';
+        return;
+      }
+      sharedList.innerHTML = playlists.map(pl =>
+        `<div class="shared-pl" data-name="${esc(pl.name)}">
+          <div class="shared-pl-header">
+            <span class="shared-pl-name">${esc(pl.name)}</span>
+            <span class="shared-pl-meta">${pl.count} tracks</span>
+            <button class="result-btn" data-action="shared" data-value="${esc(pl.name)}">Play</button>
+          </div>
+          <div class="shared-pl-tracks">
+            ${pl.tracks.map(t =>
+              `<div class="result-item">
+                <div class="result-info">
+                  <span class="result-title">${esc(t.title)}</span>
+                  <span class="result-sub">${esc(t.artist)}</span>
+                </div>
+                <button class="result-btn" data-action="queue" data-value="${esc(t.path)}">Queue</button>
+                <button class="result-btn" data-action="shared-remove" data-pl="${esc(pl.name)}" data-value="${esc(t.path)}">✕</button>
+              </div>`
+            ).join('')}
+            ${pl.tracks.length === 0 ? '<div class="mylist-empty">Empty</div>' : ''}
+          </div>
+          <div class="shared-pl-footer">
+            <button class="mylist-ctrl danger" data-action="shared-delete" data-value="${esc(pl.name)}">Delete playlist</button>
+          </div>
+        </div>`
+      ).join('');
+    }
+
+    async function loadSharedPlaylists() {
+      try {
+        const r = await fetch('/api/shared-playlists');
+        if (r.ok) renderSharedPlaylists((await r.json()).playlists);
+      } catch (_) {}
+    }
+
+    sharedList.addEventListener('click', async e => {
+      // Toggle expand on header click (but not on buttons)
+      const header = e.target.closest('.shared-pl-header');
+      if (header && !e.target.closest('button')) {
+        const tracks = header.nextElementSibling;
+        tracks.classList.toggle('open');
+        return;
+      }
+
+      const btn = e.target.closest('button[data-action]');
+      if (!btn) return;
+      const { action, value } = btn.dataset;
+
+      if (action === 'shared') {
+        await handleResultBtn(btn);
+        return;
+      }
+      if (action === 'queue') {
+        await handleResultBtn(btn);
+        return;
+      }
+      if (action === 'shared-remove') {
+        const fd = new FormData();
+        fd.append('path', value);
+        await fetch(`/api/shared-playlists/${encodeURIComponent(btn.dataset.pl)}/remove`, { method: 'POST', body: fd });
+        loadSharedPlaylists();
+        return;
+      }
+      if (action === 'shared-delete') {
+        if (!confirm(`Delete shared playlist "${value}"?`)) return;
+        await fetch(`/api/shared-playlists/${encodeURIComponent(value)}`, { method: 'DELETE' });
+        loadSharedPlaylists();
+      }
+    });
+
+    document.getElementById('shared-create-btn').addEventListener('click', async () => {
+      const input = document.getElementById('shared-new-name');
+      const name = input.value.trim();
+      if (!name) return;
+      const fd = new FormData();
+      fd.append('name', name);
+      const r = await fetch('/api/shared-playlists', { method: 'POST', body: fd });
+      const data = await r.json();
+      if (data.ok) { input.value = ''; loadSharedPlaylists(); }
+      else alert(data.error || 'Failed to create playlist');
+    });
+
+    document.getElementById('shared-new-name').addEventListener('keydown', e => {
+      if (e.key === 'Enter') document.getElementById('shared-create-btn').click();
+    });
+
+    loadSharedPlaylists();
   </script>
 </body>
 </html>
