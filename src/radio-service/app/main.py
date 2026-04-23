@@ -44,7 +44,8 @@ _secret: bytes = b""
 plex = PlexClient(settings.plex_url, settings.plex_token)
 liquidsoap = LiquidsoapClient(settings.liquidsoap_host, settings.liquidsoap_port)
 lastfm = LastFMClient(settings.lastfm_api_key) if settings.lastfm_api_key else None
-ai = AIClient(settings.ai_model, settings.ai_api_key, settings.ai_base_url) if settings.ai_model else None
+ai = AIClient(settings.ai_model, settings.ai_api_key,
+              settings.ai_base_url) if settings.ai_model else None
 bot = MatrixBot(
     settings.matrix_homeserver,
     settings.matrix_token,
@@ -381,7 +382,8 @@ async def handle_command(sender: str, cmd: str, args: str) -> None:
         write_playlist(all_tracks)
         set_mode(f"similar:{args}")
         await bot.send_message(
-            f"Smart radio: similar to {args} — {len(all_tracks)} tracks from {len(similar_artists)} artists"
+            f"Smart radio: similar to {args} — {len(all_tracks)} tracks from {
+                len(similar_artists)} artists"
         )
 
     elif cmd == "!genre":
@@ -458,7 +460,8 @@ async def handle_command(sender: str, cmd: str, args: str) -> None:
             lines.append("Plex (play only):\n" + "\n".join(f"  {p}" for p in plex_pls))
         if shared:
             lines.append("Shared (anyone can edit):\n" + "\n".join(
-                f"  {k}  ({len(v.get('tracks', []))} tracks, created by {v.get('created_by', '?').split(':')[0].lstrip('@')})"
+                f"  {k}  ({len(v.get('tracks', []))} tracks, created by {
+                    v.get('created_by', '?').split(':')[0].lstrip('@')})"
                 for k, v in shared.items()
             ))
         await bot.send_message("\n".join(lines) if lines else "No playlists found.")
@@ -570,17 +573,32 @@ async def handle_command(sender: str, cmd: str, args: str) -> None:
 
     elif cmd == "!save":
         if not args:
-            await bot.send_message("Usage: !save <track or artist - title>")
-            return
-        artist_hint, title_query = _parse_request_query(args)
-        if artist_hint and title_query:
-            results = plex.search_tracks(title_query, artist_filter=artist_hint)
+            if not now_playing.title:
+                await bot.send_message("Nothing is playing right now.")
+                return
+            results = plex.search_tracks(
+                now_playing.title, artist_filter=now_playing.artist, limit=1)
+            if results:
+                track = results[0]
+            else:
+                track = {
+                    "title": now_playing.title,
+                    "artist": now_playing.artist or "",
+                    "album": now_playing.album or "",
+                    "path": current_filename,
+                    "thumb": now_playing_thumb or "",
+                    "key": "",
+                }
         else:
-            results = plex.search_tracks(args, limit=1)
-        if not results:
-            await bot.send_message(f"No tracks found: {args}")
-            return
-        track = results[0]
+            artist_hint, title_query = _parse_request_query(args)
+            if artist_hint and title_query:
+                results = plex.search_tracks(title_query, artist_filter=artist_hint)
+            else:
+                results = plex.search_tracks(args, limit=1)
+            if not results:
+                await bot.send_message(f"No tracks found: {args}")
+                return
+            track = results[0]
         playlists = _load_user_playlists()
         tracks = playlists.setdefault(sender, [])
         if any(t["path"] == track["path"] for t in tracks):
@@ -589,7 +607,8 @@ async def handle_command(sender: str, cmd: str, args: str) -> None:
         tracks.append(track)
         _save_user_playlists(playlists)
         await bot.send_message(
-            f"Saved to your playlist: {track['artist']} — {track['title']} ({len(tracks)} tracks total)"
+            f"Saved to your playlist: {track['artist']} — {
+                track['title']} ({len(tracks)} tracks total)"
         )
 
     elif cmd == "!mylist":
@@ -669,7 +688,8 @@ HELP_TEXT = (
     "  !removefrom <name> <N>   — remove track N from shared playlist\n"
     "  !deleteplaylist <name>   — delete a shared playlist\n"
     "\nYour personal playlist:\n"
-    "  !save <track>            — save track to your playlist\n"
+    "  !save                    — save currently playing track to your playlist\n"
+    "  !save <track>            — search and save a specific track\n"
     "  !mylist                  — show your playlist\n"
     "  !mylist play             — play your playlist\n"
     "  !mylist clear            — clear your playlist\n"
@@ -794,7 +814,8 @@ async def track_changed(
             def norm(s): return s.lower().replace(" ", "").replace("-", "")
             artist_norm = norm(artist)
             match = next(
-                (t for t in candidates if norm(t["artist"]) in artist_norm or artist_norm in norm(t["artist"])),
+                (t for t in candidates if norm(t["artist"])
+                 in artist_norm or artist_norm in norm(t["artist"])),
                 candidates[0],
             )
             if match.get("thumb"):

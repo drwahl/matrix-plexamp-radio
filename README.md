@@ -180,6 +180,7 @@ All commands require your Matrix user ID to be in `ALLOWED_MATRIX_USERS`.
 | Command | Description |
 |---------|-------------|
 | `!save` | Save the currently playing track to your personal playlist |
+| `!save <query>` | Search and save a specific track to your personal playlist |
 | `!mylist` | Show your personal playlist |
 | `!mylist play` | Start playing your personal playlist |
 | `!mylist clear` | Clear your personal playlist |
