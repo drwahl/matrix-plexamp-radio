@@ -24,6 +24,10 @@ RUN pip3 install --no-cache-dir -r /tmp/requirements.txt
 # Python app
 COPY radio-service/app /app/app/
 
+# Tests (run with: docker exec radio python3 -m pytest /app/tests/ -v)
+COPY radio-service/tests /app/tests/
+COPY radio-service/pytest.ini /app/pytest.ini
+
 # Web player
 COPY web /app/web/
 
