@@ -11,11 +11,23 @@ if ! python3 -m flake8 --version &>/dev/null || ! python3 -m autopep8 --version 
     exit 0
 fi
 
+# Syntax check first — catches autopep8-introduced split f-strings on Python < 3.12
+for f in $STAGED; do
+    [ -f "$f" ] || continue
+    python3 -m py_compile "$f" || { echo "pre-commit: syntax error in $f" >&2; exit 1; }
+done
+
 # Run autopep8 in-place on staged files, then re-stage any that changed
 for f in $STAGED; do
     [ -f "$f" ] || continue
     python3 -m autopep8 --in-place "$f"
     git add "$f"
+done
+
+# Syntax check again after autopep8 in case it introduced a regression
+for f in $STAGED; do
+    [ -f "$f" ] || continue
+    python3 -m py_compile "$f" || { echo "pre-commit: autopep8 introduced a syntax error in $f" >&2; exit 1; }
 done
 
 # Determine the flake8 config to use (lives next to the Python source)

@@ -381,9 +381,10 @@ async def handle_command(sender: str, cmd: str, args: str) -> None:
         random.shuffle(all_tracks)
         write_playlist(all_tracks)
         set_mode(f"similar:{args}")
+        n_tracks = len(all_tracks)
+        n_artists = len(similar_artists)
         await bot.send_message(
-            f"Smart radio: similar to {args} — {len(all_tracks)} tracks from {
-                len(similar_artists)} artists"
+            f"Smart radio: similar to {args} — {n_tracks} tracks from {n_artists} artists"
         )
 
     elif cmd == "!genre":
@@ -460,8 +461,11 @@ async def handle_command(sender: str, cmd: str, args: str) -> None:
             lines.append("Plex (play only):\n" + "\n".join(f"  {p}" for p in plex_pls))
         if shared:
             lines.append("Shared (anyone can edit):\n" + "\n".join(
-                f"  {k}  ({len(v.get('tracks', []))} tracks, created by {
-                    v.get('created_by', '?').split(':')[0].lstrip('@')})"
+                "  {}  ({} tracks, created by {})".format(
+                    k,
+                    len(v.get('tracks', [])),
+                    v.get('created_by', '?').split(':')[0].lstrip('@'),
+                )
                 for k, v in shared.items()
             ))
         await bot.send_message("\n".join(lines) if lines else "No playlists found.")
@@ -607,8 +611,9 @@ async def handle_command(sender: str, cmd: str, args: str) -> None:
         tracks.append(track)
         _save_user_playlists(playlists)
         await bot.send_message(
-            f"Saved to your playlist: {track['artist']} — {
-                track['title']} ({len(tracks)} tracks total)"
+            "Saved to your playlist: {} — {} ({} tracks total)".format(
+                track['artist'], track['title'], len(tracks)
+            )
         )
 
     elif cmd == "!mylist":
