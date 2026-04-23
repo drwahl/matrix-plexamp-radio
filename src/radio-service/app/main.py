@@ -4,6 +4,7 @@ import logging
 import random
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Optional
 
 import httpx
 from fastapi import FastAPI, Form, Request, Response
@@ -105,7 +106,7 @@ def _save_user_playlists(data: dict) -> None:
         json.dump(data, f)
 
 
-def _session_user(request: Request) -> str | None:
+def _session_user(request: Request) -> Optional[str]:
     token = request.cookies.get(auth.COOKIE_NAME)
     return auth.verify_token(token, _secret) if token else None
 
@@ -123,7 +124,7 @@ def _save_shared_playlists(data: dict) -> None:
         json.dump(data, f)
 
 
-def _find_shared(name: str, shared: dict) -> str | None:
+def _find_shared(name: str, shared: dict) -> Optional[str]:
     """Case-insensitive key lookup into the shared playlists dict."""
     return next((k for k in shared if k.lower() == name.lower()), None)
 
