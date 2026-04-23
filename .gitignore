@@ -1,2 +1,5 @@
 .env
 ansible/inventory/group_vars/vault.yml
+__pycache__/
+*.pyc
+*.pyo
