@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Collect staged Python files
+STAGED=$(git diff --cached --name-only --diff-filter=ACM | grep '\.py$' || true)
+[ -z "$STAGED" ] && exit 0
+
+# Check tools are available
+if ! python3 -m flake8 --version &>/dev/null || ! python3 -m autopep8 --version &>/dev/null; then
+    echo "pre-commit: flake8/autopep8 not found, skipping lint" >&2
+    exit 0
+fi
+
+# Run autopep8 in-place on staged files, then re-stage any that changed
+for f in $STAGED; do
+    [ -f "$f" ] || continue
+    python3 -m autopep8 --in-place "$f"
+    git add "$f"
+done
+
+# Determine the flake8 config to use (lives next to the Python source)
+FLAKE8_CFG="src/radio-service/.flake8"
+CFG_ARG=""
+[ -f "$FLAKE8_CFG" ] && CFG_ARG="--config=$FLAKE8_CFG"
+
+# Run flake8 — exits non-zero on any violation, blocking the commit
+python3 -m flake8 $CFG_ARG $STAGED
