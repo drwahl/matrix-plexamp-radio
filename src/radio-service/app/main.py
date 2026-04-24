@@ -94,15 +94,21 @@ def trim_queue_to(current_path: str) -> None:
         with open(PLAYLIST_FILE) as f:
             lines = [ln.strip() for ln in f if ln.strip()]
     except FileNotFoundError:
+        logger.info("trim_queue_to: playlist file not found")
+        return
+    if not current_path:
+        logger.info("trim_queue_to: empty filename, skipping")
         return
     if current_path not in lines:
+        logger.info("trim_queue_to: %r not in queue (queue starts: %r), skipping",
+                    current_path, lines[:2] if lines else [])
         return
     idx = lines.index(current_path)
     if idx == 0:
         return
     with open(PLAYLIST_FILE, "w") as f:
         f.write("\n".join(lines[idx:]))
-    logger.debug("Queue trimmed: dropped %d played track(s)", idx)
+    logger.info("Queue trimmed: dropped %d played track(s), now at %r", idx, current_path)
 
 
 def set_mode(mode: str) -> None:
@@ -835,6 +841,8 @@ async def _on_bot_ready() -> None:
     except FileNotFoundError:
         queued = []
 
+    logger.info("_on_bot_ready: saved_mode=%r, queue_len=%d, first=%r",
+                saved_mode, len(queued), queued[0] if queued else None)
     if saved_mode and queued:
         set_mode(saved_mode)
         resume_msg = f"Resuming: {saved_mode} ({len(queued)} tracks in queue)"
@@ -928,7 +936,9 @@ async def track_changed(
 ) -> dict:
     global now_playing, now_playing_thumb, current_track, current_filename
 
+    logger.info("track_changed: title=%r artist=%r filename=%r", title, artist, filename)
     if title == now_playing.title and artist == now_playing.artist:
+        logger.info("track_changed: deduped (already playing)")
         return {"ok": True}
 
     now_playing = NowPlaying(
