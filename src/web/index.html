@@ -102,6 +102,12 @@
       letter-spacing: 0.05em;
     }
 
+    #lag {
+      font-size: 0.7rem;
+      color: #444;
+      letter-spacing: 0.04em;
+    }
+
     #search-section {
       width: 100%;
       max-width: 320px;
@@ -340,6 +346,7 @@
       <span>🔊</span>
     </div>
     <div id="status">stopped</div>
+    <div id="lag"></div>
   </div>
 
   <div id="search-section">
@@ -377,11 +384,20 @@
     const btn     = document.getElementById('play-btn');
     const vol     = document.getElementById('volume');
     const status  = document.getElementById('status');
+    const lagEl   = document.getElementById('lag');
     const ambient = document.getElementById('ambient');
 
     let playing = false;
 
     function setStatus(text) { status.textContent = text; }
+
+    function updateLag() {
+      if (!playing || player.buffered.length === 0) { lagEl.textContent = ''; return; }
+      const lag = Math.round(player.buffered.end(player.buffered.length - 1) - player.currentTime);
+      if (lag < 2) lagEl.textContent = '';
+      else lagEl.textContent = '~' + lag + 's behind live';
+    }
+    setInterval(updateLag, 1000);
 
     function startStream() {
       player.src = '/stream?' + Date.now();
