@@ -558,8 +558,17 @@
       if (playing) stopStream(); else startStream();
     });
 
+    let prevVol = parseFloat(vol.value);
     vol.addEventListener('input', () => {
-      player.volume = parseFloat(vol.value);
+      const v = parseFloat(vol.value);
+      player.volume = v;
+      // muted is more reliable cross-browser for keeping the stream alive while silent
+      player.muted = (v === 0);
+      // coming back from silence: snap to live so buffered lag doesn't play back
+      if (prevVol === 0 && v > 0 && player.buffered.length > 0) {
+        player.currentTime = player.buffered.end(player.buffered.length - 1) - 0.5;
+      }
+      prevVol = v;
     });
 
     player.addEventListener('waiting',  () => setStatus('buffering…'));
