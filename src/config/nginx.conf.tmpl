@@ -42,6 +42,8 @@ server {
         auth_request     /internal/auth-check;
         error_page 401 = @login_redirect;
         try_files $uri $uri/ /index.html;
+        # Prevent browsers from caching the HTML player indefinitely
+        add_header Cache-Control "no-cache, must-revalidate";
     }
 
     location @login_redirect {

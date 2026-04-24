@@ -83,6 +83,28 @@ def write_playlist(paths: list[str]) -> None:
         f.write("\n".join(paths[:MAX_PLAYLIST_TRACKS]))
 
 
+def trim_queue_to(current_path: str) -> None:
+    """Remove all entries before current_path from background.m3u.
+
+    Keeps current_path at the top so a restart resumes from the current track
+    rather than rewinding to the beginning of the full playlist.
+    Skips if current_path is not in the file (e.g. it's a !request track).
+    """
+    try:
+        with open(PLAYLIST_FILE) as f:
+            lines = [ln.strip() for ln in f if ln.strip()]
+    except FileNotFoundError:
+        return
+    if current_path not in lines:
+        return
+    idx = lines.index(current_path)
+    if idx == 0:
+        return
+    with open(PLAYLIST_FILE, "w") as f:
+        f.write("\n".join(lines[idx:]))
+    logger.debug("Queue trimmed: dropped %d played track(s)", idx)
+
+
 def set_mode(mode: str) -> None:
     global current_mode
     current_mode = mode
@@ -919,6 +941,7 @@ async def track_changed(
         "path": filename, "thumb": "", "key": "", "duration": 0,
     }
     current_filename = filename
+    trim_queue_to(filename)
 
     try:
         candidates = plex.search_tracks(title, limit=10)
