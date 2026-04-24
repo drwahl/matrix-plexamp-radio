@@ -575,6 +575,7 @@
         npDuration  = d.duration   || 0;
         now_playing_title = d.title || '';
         progressDuration.textContent = npDuration ? fmtTime(npDuration) : '';
+        console.log('[radio] now-playing:', d.title, '| started_at:', npStartedAt, '| duration:', npDuration);
 
         const art = document.getElementById('album-art');
         if (d.has_album_art && d.title !== lastTitle) {
