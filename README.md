@@ -170,7 +170,8 @@ All commands require your Matrix user ID to be in `ALLOWED_MATRIX_USERS`.
 | `!playlist <name>` | Switch to a Plex or shared playlist |
 | `!similar <artist>` | Smart radio: similar artists via Last.fm (requires `LASTFM_API_KEY`) |
 | `!genre <genre>` | Play tracks filtered by genre |
-| `!random` | Shuffle your full library |
+| `!shuffle` | Reshuffle the currently playing playlist |
+| `!random` | Switch to full library random mode |
 | `!playlists` | List all playlists (Plex + shared) |
 | `!mode` | Show current playback mode |
 | `!help` | Show all commands |
