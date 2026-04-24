@@ -396,6 +396,36 @@
 
     #shared-new-name:focus { border-color: #1db954; }
     #shared-new-name::placeholder { color: #444; }
+
+    #plex-section {
+      width: 100%;
+      max-width: 320px;
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+
+    #plex-label {
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: #666;
+    }
+
+    .plex-pl {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.4rem 0.6rem;
+      background: rgba(255,255,255,0.04);
+      border-radius: 6px;
+    }
+
+    .plex-pl-name {
+      flex: 1;
+      font-size: 0.85rem;
+    }
   </style>
 </head>
 <body>
@@ -457,6 +487,11 @@
       <input id="shared-new-name" type="text" placeholder="New playlist name…" autocomplete="off" spellcheck="false">
       <button class="mylist-ctrl" id="shared-create-btn">Create</button>
     </div>
+  </div>
+
+  <div id="plex-section">
+    <div><span id="plex-label">Plex Playlists</span></div>
+    <div id="plex-list"></div>
   </div>
 
   <audio id="player">
@@ -906,6 +941,34 @@
     });
 
     loadSharedPlaylists();
+
+    // Plex playlists
+    const plexList = document.getElementById('plex-list');
+
+    async function loadPlexPlaylists() {
+      try {
+        const r = await fetch('/api/plex-playlists');
+        if (!r.ok) return;
+        const data = await r.json();
+        if (!data.playlists.length) {
+          plexList.innerHTML = '<div class="mylist-empty">No Plex playlists</div>';
+          return;
+        }
+        plexList.innerHTML = data.playlists.map(p =>
+          `<div class="plex-pl">
+            <span class="plex-pl-name">${esc(p.name)}</span>
+            <button class="result-btn" data-action="playlist" data-value="${esc(p.name)}">Play</button>
+          </div>`
+        ).join('');
+      } catch (_) {}
+    }
+
+    plexList.addEventListener('click', async e => {
+      const btn = e.target.closest('button[data-action]');
+      if (btn) await handleResultBtn(btn);
+    });
+
+    loadPlexPlaylists();
   </script>
 </body>
 </html>

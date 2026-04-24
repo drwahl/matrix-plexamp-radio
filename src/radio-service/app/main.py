@@ -1001,6 +1001,11 @@ async def search_library(q: str = "") -> dict:
     return {"tracks": tracks, "artists": artists, "playlists": playlists}
 
 
+@app.get("/api/plex-playlists")
+async def get_plex_playlists() -> dict:
+    return {"playlists": [{"name": p} for p in plex.list_playlists()]}
+
+
 @app.get("/api/shared-playlists")
 async def get_shared_playlists() -> dict:
     shared = _load_shared_playlists()
