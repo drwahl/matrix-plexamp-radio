@@ -539,7 +539,9 @@ async def handle_command(sender: str, cmd: str, args: str) -> None:
         _save_shared_playlists(shared)
         _sync_to_plex(match, tracks)
         await bot.send_message(
-            f"Added to '{match}': {track['artist']} — {track['title']} ({len(tracks)} tracks total)"
+            "Added to '{}': {} — {} (#{} of {})".format(
+                match, track['artist'], track['title'], len(tracks), len(tracks)
+            )
         )
 
     elif cmd == "!removefrom":
@@ -639,8 +641,8 @@ async def handle_command(sender: str, cmd: str, args: str) -> None:
         tracks.append(track)
         _save_user_playlists(playlists)
         await bot.send_message(
-            "Saved to your playlist: {} — {} ({} tracks total)".format(
-                track['artist'], track['title'], len(tracks)
+            "Saved to your playlist: {} — {} (#{} of {})".format(
+                track['artist'], track['title'], len(tracks), len(tracks)
             )
         )
 
