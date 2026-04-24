@@ -416,68 +416,17 @@ async def handle_command(sender: str, cmd: str, args: str) -> None:
         await bot.send_message(f"Playing: random shuffle ({len(tracks)} tracks)")
 
     elif cmd == "!shuffle":
-        mode = current_mode
-        if mode.startswith("playlist:"):
-            name = mode[len("playlist:"):]
-            tracks = plex.get_playlist_tracks(name)
-            if not tracks:
-                await bot.send_message(f"Couldn't reload playlist '{name}'.")
-                return
-            random.shuffle(tracks)
-            write_playlist(tracks)
-            await bot.send_message(f"Reshuffled: {name} ({len(tracks)} tracks)")
-        elif mode.startswith("shared:"):
-            name = mode[len("shared:"):]
-            shared = _load_shared_playlists()
-            match = _find_shared(name, shared)
-            if not match:
-                await bot.send_message(f"Shared playlist '{name}' not found.")
-                return
-            tracks = [t["path"] for t in shared[match].get("tracks", [])]
-            if not tracks:
-                await bot.send_message(f"Shared playlist '{match}' is empty.")
-                return
-            random.shuffle(tracks)
-            write_playlist(tracks)
-            await bot.send_message(f"Reshuffled: {match} ({len(tracks)} tracks)")
-        elif mode.startswith("genre:"):
-            genre = mode[len("genre:"):]
-            tracks = plex.get_tracks_by_genre(genre)
-            random.shuffle(tracks)
-            write_playlist(tracks)
-            await bot.send_message(f"Reshuffled: {genre} ({len(tracks)} tracks)")
-        elif mode.startswith("similar:"):
-            if lastfm is None:
-                await bot.send_message("Can't reshuffle similar radio without Last.fm.")
-                return
-            artist = mode[len("similar:"):]
-            similar_artists = lastfm.get_similar_artists(artist)
-            all_tracks: list[str] = []
-            for a in similar_artists:
-                all_tracks.extend(plex.get_tracks_by_artist(a))
-            if not all_tracks:
-                await bot.send_message(f"No tracks found for similar:{artist}")
-                return
-            random.shuffle(all_tracks)
-            write_playlist(all_tracks)
-            await bot.send_message(f"Reshuffled: similar to {artist} ({len(all_tracks)} tracks)")
-        elif mode.startswith("user:"):
-            user_id = mode[len("user:"):]
-            user_playlists = _load_user_playlists()
-            tracks = [t["path"] for t in user_playlists.get(user_id, [])]
-            if not tracks:
-                await bot.send_message("That user's playlist is empty.")
-                return
-            random.shuffle(tracks)
-            write_playlist(tracks)
-            await bot.send_message(f"Reshuffled: personal playlist ({len(tracks)} tracks)")
-        else:
-            # random, stopped, or unknown — reshuffle full library
-            tracks = plex.get_all_tracks()
-            random.shuffle(tracks)
-            write_playlist(tracks)
-            set_mode("random")
-            await bot.send_message(f"Reshuffled: full library ({len(tracks)} tracks)")
+        try:
+            with open(PLAYLIST_FILE) as f:
+                tracks = [ln.strip() for ln in f if ln.strip()]
+        except FileNotFoundError:
+            tracks = []
+        if not tracks:
+            await bot.send_message("Nothing in the queue to shuffle.")
+            return
+        random.shuffle(tracks)
+        write_playlist(tracks)
+        await bot.send_message(f"Queue reshuffled ({len(tracks)} tracks)")
 
     elif cmd == "!random":
         await bot.send_message("Shuffling full library...")
