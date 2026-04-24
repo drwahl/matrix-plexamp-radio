@@ -1070,13 +1070,14 @@ async def add_to_shared_playlist(
     if not match:
         return {"ok": False, "error": "Playlist not found"}
     tracks = shared[match].setdefault("tracks", [])
-    if not any(t["path"] == path for t in tracks):
-        track: dict = {"title": title, "artist": artist, "album": album, "path": path}
-        if key:
-            track["key"] = key
-        tracks.append(track)
-        _save_shared_playlists(shared)
-        _sync_to_plex(match, tracks)
+    if any(t["path"] == path for t in tracks):
+        return {"ok": True, "already": True, "count": len(tracks)}
+    track: dict = {"title": title, "artist": artist, "album": album, "path": path}
+    if key:
+        track["key"] = key
+    tracks.append(track)
+    _save_shared_playlists(shared)
+    _sync_to_plex(match, tracks)
     return {"ok": True, "count": len(tracks)}
 
 
@@ -1174,9 +1175,10 @@ async def add_to_my_playlist(
         return Response(status_code=401)
     playlists = _load_user_playlists()
     tracks = playlists.setdefault(user_id, [])
-    if not any(t["path"] == path for t in tracks):
-        tracks.append({"title": title, "artist": artist, "album": album, "path": path})
-        _save_user_playlists(playlists)
+    if any(t["path"] == path for t in tracks):
+        return {"ok": True, "already": True, "count": len(tracks)}
+    tracks.append({"title": title, "artist": artist, "album": album, "path": path})
+    _save_user_playlists(playlists)
     return {"ok": True, "count": len(tracks)}
 
 

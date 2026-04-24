@@ -778,7 +778,11 @@
         const data = await r.json();
         if (data.ok) {
           if (action === 'queue') { btn.textContent = 'Queued!'; btn.classList.replace('busy', 'done'); }
-          else if (action === 'save') { btn.textContent = 'Saved!'; btn.classList.replace('busy', 'done'); loadMyPlaylist(); }
+          else if (action === 'save') {
+            btn.textContent = data.already ? 'Already saved' : 'Saved!';
+            btn.classList.replace('busy', 'done');
+            if (!data.already) loadMyPlaylist();
+          }
           else if (action === 'mylist-remove') loadMyPlaylist();
           else { btn.textContent = 'Playing'; btn.classList.replace('busy', 'done'); }
         } else {
