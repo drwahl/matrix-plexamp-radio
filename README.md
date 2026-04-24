@@ -191,6 +191,7 @@ All commands require your Matrix user ID to be in `ALLOWED_MATRIX_USERS`.
 | Command | Description |
 |---------|-------------|
 | `!createplaylist <name>` | Create a new shared playlist |
+| `!addto <name>` | Add the currently playing track to a shared playlist |
 | `!addto <name> \| <query>` | Search Plex and add the top result to a shared playlist |
 | `!removefrom <name> \| <N>` | Remove track N from a shared playlist |
 | `!showplaylist <name>` | List tracks in a shared playlist |

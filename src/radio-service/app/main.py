@@ -487,25 +487,50 @@ async def handle_command(sender: str, cmd: str, args: str) -> None:
         await bot.send_message(f"Created shared playlist: {name}")
 
     elif cmd == "!addto":
-        parts_a = args.split(None, 1) if args else []
-        if len(parts_a) < 2:
-            await bot.send_message("Usage: !addto <playlist> <track query>")
+        if not args:
+            await bot.send_message("Usage: !addto <playlist>  or  !addto <playlist> | <track query>")
             return
-        pl_name, track_query = parts_a
+        if "|" in args:
+            pl_name, _, track_query = args.partition("|")
+            pl_name = pl_name.strip()
+            track_query = track_query.strip()
+        else:
+            pl_name = args.strip()
+            track_query = ""
         shared = _load_shared_playlists()
         match = _find_shared(pl_name, shared)
         if not match:
-            await bot.send_message(f"Shared playlist '{pl_name}' not found. Use !createplaylist to make one.")
+            await bot.send_message(
+                f"Shared playlist '{pl_name}' not found. Use !createplaylist to make one."
+            )
             return
-        artist_hint, title_query = _parse_request_query(track_query)
-        if artist_hint and title_query:
-            results = plex.search_tracks(title_query, artist_filter=artist_hint)
+        if track_query:
+            artist_hint, title_query = _parse_request_query(track_query)
+            if artist_hint and title_query:
+                results = plex.search_tracks(title_query, artist_filter=artist_hint)
+            else:
+                results = plex.search_tracks(track_query, limit=1)
+            if not results:
+                await bot.send_message(f"No tracks found: {track_query}")
+                return
+            track = results[0]
         else:
-            results = plex.search_tracks(track_query, limit=1)
-        if not results:
-            await bot.send_message(f"No tracks found: {track_query}")
-            return
-        track = results[0]
+            if not now_playing.title:
+                await bot.send_message("Nothing is playing right now.")
+                return
+            results = plex.search_tracks(
+                now_playing.title, artist_filter=now_playing.artist, limit=1)
+            if results:
+                track = results[0]
+            else:
+                track = {
+                    "title": now_playing.title,
+                    "artist": now_playing.artist or "",
+                    "album": now_playing.album or "",
+                    "path": current_filename,
+                    "thumb": now_playing_thumb or "",
+                    "key": "",
+                }
         tracks = shared[match].setdefault("tracks", [])
         if any(t["path"] == track["path"] for t in tracks):
             await bot.send_message(f"Already in '{match}': {track['artist']} — {track['title']}")
@@ -518,11 +543,12 @@ async def handle_command(sender: str, cmd: str, args: str) -> None:
         )
 
     elif cmd == "!removefrom":
-        parts_r = args.split(None, 1) if args else []
-        if len(parts_r) < 2:
-            await bot.send_message("Usage: !removefrom <playlist> <track number>")
+        if not args or "|" not in args:
+            await bot.send_message("Usage: !removefrom <playlist> | <track number>")
             return
-        pl_name, num_str = parts_r
+        pl_name, _, num_str = args.partition("|")
+        pl_name = pl_name.strip()
+        num_str = num_str.strip()
         shared = _load_shared_playlists()
         match = _find_shared(pl_name, shared)
         if not match:
@@ -537,9 +563,11 @@ async def handle_command(sender: str, cmd: str, args: str) -> None:
             removed = tracks.pop(idx)
             _save_shared_playlists(shared)
             _sync_to_plex(match, tracks)
-            await bot.send_message(f"Removed from '{match}': {removed['artist']} — {removed['title']}")
+            await bot.send_message(
+                f"Removed from '{match}': {removed['artist']} — {removed['title']}"
+            )
         except ValueError:
-            await bot.send_message("Usage: !removefrom <playlist> <track number>")
+            await bot.send_message("Usage: !removefrom <playlist> | <track number>")
 
     elif cmd == "!showplaylist":
         if not args:
@@ -689,8 +717,9 @@ HELP_TEXT = (
     "\nShared playlists (anyone can edit):\n"
     "  !createplaylist <name>   — create a new shared playlist\n"
     "  !showplaylist <name>     — list tracks in a shared playlist\n"
-    "  !addto <name> <track>    — add a track to shared playlist\n"
-    "  !removefrom <name> <N>   — remove track N from shared playlist\n"
+    "  !addto <name>             — add currently playing track to shared playlist\n"
+    "  !addto <name> | <track>  — search and add a track to shared playlist\n"
+    "  !removefrom <name> | <N> — remove track N from shared playlist\n"
     "  !deleteplaylist <name>   — delete a shared playlist\n"
     "\nYour personal playlist:\n"
     "  !save                    — save currently playing track to your playlist\n"
