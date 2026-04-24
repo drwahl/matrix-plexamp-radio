@@ -995,7 +995,14 @@ async def search_library(q: str = "") -> dict:
     if len(q) < 2:
         return {"tracks": [], "artists": [], "playlists": []}
     tracks = plex.search_tracks(q, limit=10)
-    artists = plex.search_artists(q, limit=5)
+    artists_raw = plex.search_artists(q, limit=3)
+    artists = [
+        {
+            "name": a["name"],
+            "tracks": plex.search_tracks(a["name"], limit=10, artist_filter=a["name"]),
+        }
+        for a in artists_raw
+    ]
     ql = q.lower()
     playlists: list[dict] = [
         {"name": p, "type": "plex"}

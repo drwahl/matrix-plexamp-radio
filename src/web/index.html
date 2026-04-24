@@ -662,13 +662,26 @@
       }
 
       if (data.artists.length) {
-        const rows = data.artists.map(a =>
-          `<div class="result-item">
-            <div class="result-info"><span class="result-title">${esc(a.name)}</span></div>
-            <button class="result-btn" data-action="artist" data-value="${esc(a.name)}">Play</button>
-          </div>`
-        ).join('');
-        parts.push(`<div class="result-section"><div class="result-header">Artists</div>${rows}</div>`);
+        const sections = data.artists.map(a => {
+          const trackRows = (a.tracks || []).map(t =>
+            `<div class="result-item">
+              <div class="result-info">
+                <span class="result-title">${esc(t.title)}</span>
+                <span class="result-sub">${esc(t.album || '')}</span>
+              </div>
+              <button class="result-btn" data-action="queue" data-value="${esc(t.path)}">Queue</button>
+              <button class="result-btn" data-action="save" data-value="${esc(t.path)}" data-title="${esc(t.title)}" data-artist="${esc(t.artist)}" data-album="${esc(t.album)}" data-key="${esc(t.key||'')}">Save</button>
+            </div>`
+          ).join('');
+          return `<div class="result-section">
+            <div class="result-header">
+              ${esc(a.name)}
+              <button class="result-btn" data-action="artist" data-value="${esc(a.name)}">Play all</button>
+            </div>
+            ${trackRows || '<div class="no-results">No tracks found</div>'}
+          </div>`;
+        }).join('');
+        parts.push(sections);
       }
 
       if (data.playlists.length) {
