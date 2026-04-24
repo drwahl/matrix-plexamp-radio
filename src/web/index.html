@@ -102,11 +102,18 @@
       letter-spacing: 0.05em;
     }
 
-    #lag {
+    #live-btn {
       font-size: 0.7rem;
-      color: #444;
+      color: #555;
+      background: none;
+      border: 1px solid #555;
+      border-radius: 3px;
+      padding: 0.15rem 0.5rem;
+      cursor: pointer;
       letter-spacing: 0.04em;
+      display: none;
     }
+    #live-btn:hover { color: #1db954; border-color: #1db954; }
 
     #search-section {
       width: 100%;
@@ -346,7 +353,7 @@
       <span>🔊</span>
     </div>
     <div id="status">stopped</div>
-    <div id="lag"></div>
+    <button id="live-btn" title="Jump to live"></button>
   </div>
 
   <div id="search-section">
@@ -384,7 +391,7 @@
     const btn     = document.getElementById('play-btn');
     const vol     = document.getElementById('volume');
     const status  = document.getElementById('status');
-    const lagEl   = document.getElementById('lag');
+    const liveBtn = document.getElementById('live-btn');
     const ambient = document.getElementById('ambient');
 
     let playing = false;
@@ -392,12 +399,19 @@
     function setStatus(text) { status.textContent = text; }
 
     function updateLag() {
-      if (!playing || player.buffered.length === 0) { lagEl.textContent = ''; return; }
+      if (!playing || player.buffered.length === 0) { liveBtn.style.display = 'none'; return; }
       const lag = Math.round(player.buffered.end(player.buffered.length - 1) - player.currentTime);
-      if (lag < 2) lagEl.textContent = '';
-      else lagEl.textContent = '~' + lag + 's behind live';
+      if (lag < 5) { liveBtn.style.display = 'none'; return; }
+      liveBtn.textContent = '~' + lag + 's behind — go live ⏩';
+      liveBtn.style.display = '';
     }
     setInterval(updateLag, 1000);
+
+    liveBtn.addEventListener('click', () => {
+      if (player.buffered.length === 0) return;
+      player.currentTime = player.buffered.end(player.buffered.length - 1) - 0.5;
+      liveBtn.style.display = 'none';
+    });
 
     function startStream() {
       player.src = '/stream?' + Date.now();
