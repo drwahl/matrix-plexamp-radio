@@ -395,6 +395,7 @@
     const ambient = document.getElementById('ambient');
 
     let playing = false;
+    let stoppedByUser = false;
 
     function setStatus(text) { status.textContent = text; }
 
@@ -414,6 +415,7 @@
     });
 
     function startStream() {
+      stoppedByUser = false;
       player.src = '/stream?' + Date.now();
       player.volume = parseFloat(vol.value);
       player.play().then(() => {
@@ -427,6 +429,7 @@
     }
 
     function stopStream() {
+      stoppedByUser = true;
       player.pause();
       player.src = '';
       playing = false;
@@ -445,7 +448,7 @@
 
     player.addEventListener('waiting',  () => setStatus('buffering…'));
     player.addEventListener('playing',  () => setStatus('playing'));
-    player.addEventListener('error',    () => { setStatus('stream error — retrying…'); setTimeout(startStream, 3000); });
+    player.addEventListener('error',    () => { if (!stoppedByUser) { setStatus('stream error — retrying…'); setTimeout(startStream, 3000); } });
     player.addEventListener('stalled',  () => setStatus('stalled…'));
 
     if (localStorage.getItem('radioPlaying') !== '0') {
