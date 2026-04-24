@@ -23,7 +23,8 @@ class PlexClient:
             if plex_path.startswith(root):
                 rel = plex_path[len(root):].lstrip("/")
                 return f"/music/{rel}"
-        logger.warning("Path %r doesn't start with any known Plex root %s", plex_path, self._plex_roots)
+        logger.warning("Path %r doesn't start with any known Plex root %s",
+                       plex_path, self._plex_roots)
         return plex_path
 
     def _track_to_path(self, track: Track) -> str:
@@ -36,7 +37,8 @@ class PlexClient:
             "album": t.parentTitle,
             "path": self._track_to_path(t),
             "thumb": t.parentThumb or t.thumb or "",
-            "key": t.key,  # Plex item key — used for playlist write operations
+            "key": t.key,
+            "duration": int((t.duration or 0) / 1000),  # ms → seconds
         }
 
     def search_tracks(self, query: str, limit: int = 10, artist_filter: str = "") -> list[dict]:

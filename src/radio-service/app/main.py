@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 import random
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
@@ -853,7 +854,10 @@ async def track_changed(
     if title == now_playing.title and artist == now_playing.artist:
         return {"ok": True}
 
-    now_playing = NowPlaying(title=title, artist=artist, album=album, mode=current_mode)
+    now_playing = NowPlaying(
+        title=title, artist=artist, album=album, mode=current_mode,
+        started_at=time.time(),
+    )
     now_playing_thumb = ""
     current_filename = filename
 
@@ -870,6 +874,8 @@ async def track_changed(
             if match.get("thumb"):
                 now_playing_thumb = match["thumb"]
                 now_playing.has_album_art = True
+            if match.get("duration"):
+                now_playing.duration = match["duration"]
     except Exception:
         logger.warning("Album art lookup failed for: %s - %s", artist, title)
 
