@@ -684,6 +684,28 @@
         parts.push(sections);
       }
 
+      if (data.albums && data.albums.length) {
+        const sections = data.albums.map(a => {
+          const trackRows = (a.tracks || []).map(t =>
+            `<div class="result-item">
+              <div class="result-info">
+                <span class="result-title">${esc(t.title)}</span>
+              </div>
+              <button class="result-btn" data-action="queue" data-value="${esc(t.path)}">Queue</button>
+              <button class="result-btn" data-action="save" data-value="${esc(t.path)}" data-title="${esc(t.title)}" data-artist="${esc(t.artist)}" data-album="${esc(a.title)}" data-key="${esc(t.key||'')}">Save</button>
+            </div>`
+          ).join('');
+          return `<div class="result-section">
+            <div class="result-header">
+              <span>${esc(a.title)}</span>
+              <span class="result-sub" style="font-weight:normal">${esc(a.artist)}</span>
+            </div>
+            ${trackRows || '<div class="no-results">No tracks found</div>'}
+          </div>`;
+        }).join('');
+        parts.push(sections);
+      }
+
       if (data.playlists.length) {
         const rows = data.playlists.map(p =>
           `<div class="result-item">

@@ -993,7 +993,7 @@ async def track_changed(
 @app.get("/api/search")
 async def search_library(q: str = "") -> dict:
     if len(q) < 2:
-        return {"tracks": [], "artists": [], "playlists": []}
+        return {"tracks": [], "artists": [], "albums": [], "playlists": []}
     tracks = plex.search_tracks(q, limit=10)
     artists_raw = plex.search_artists(q, limit=3)
     artists = [
@@ -1003,6 +1003,7 @@ async def search_library(q: str = "") -> dict:
         }
         for a in artists_raw
     ]
+    albums = plex.search_albums(q, limit=3)
     ql = q.lower()
     playlists: list[dict] = [
         {"name": p, "type": "plex"}
@@ -1013,7 +1014,7 @@ async def search_library(q: str = "") -> dict:
         {"name": k, "type": "shared", "count": len(v.get("tracks", []))}
         for k, v in shared.items() if ql in k.lower()
     ]
-    return {"tracks": tracks, "artists": artists, "playlists": playlists}
+    return {"tracks": tracks, "artists": artists, "albums": albums, "playlists": playlists}
 
 
 @app.get("/api/plex-playlists")

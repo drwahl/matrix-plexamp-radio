@@ -68,6 +68,21 @@ class PlexClient:
         results = self._music.search(query, libtype="artist", maxresults=limit)
         return [{"name": a.title} for a in results]
 
+    def search_albums(self, query: str, limit: int = 3) -> list[dict]:
+        results = self._music.search(query, libtype="album", maxresults=limit)
+        albums = []
+        for album in results:
+            try:
+                tracks = [self._track_to_dict(t) for t in album.tracks()]
+            except Exception:
+                tracks = []
+            albums.append({
+                "title": album.title,
+                "artist": album.parentTitle,
+                "tracks": tracks,
+            })
+        return albums
+
     def get_tracks_by_artist(self, artist_name: str) -> list[str]:
         try:
             results = self._music.search(artist_name, libtype="track")
