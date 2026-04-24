@@ -28,6 +28,7 @@ logger = logging.getLogger(__name__)
 
 PLAYLIST_FILE = "/data/background.m3u"
 MODE_FILE = "/data/mode"
+LAST_PLAYED_FILE = "/data/last_played"
 USER_PLAYLISTS_FILE = "/data/user_playlists.json"
 SHARED_PLAYLISTS_FILE = "/data/shared_playlists.json"
 MAX_PLAYLIST_TRACKS = 1500  # Liquidsoap's OCaml List.map blows the stack on very large playlists
@@ -83,32 +84,34 @@ def write_playlist(paths: list[str]) -> None:
         f.write("\n".join(paths[:MAX_PLAYLIST_TRACKS]))
 
 
-def trim_queue_to(current_path: str) -> None:
-    """Remove all entries before current_path from background.m3u.
+def restore_queue_position() -> None:
+    """On startup, trim background.m3u to resume near the last known track.
 
-    Keeps current_path at the top so a restart resumes from the current track
-    rather than rewinding to the beginning of the full playlist.
-    Skips if current_path is not in the file (e.g. it's a !request track).
+    Called once from lifespan startup — never during live playback.
+    Modifying background.m3u while Liquidsoap is actively playing causes it
+    to reload and replay the current track (double-play bug).
     """
+    try:
+        with open(LAST_PLAYED_FILE) as f:
+            last_played = f.read().strip()
+    except FileNotFoundError:
+        return
+    if not last_played:
+        return
     try:
         with open(PLAYLIST_FILE) as f:
             lines = [ln.strip() for ln in f if ln.strip()]
     except FileNotFoundError:
-        logger.info("trim_queue_to: playlist file not found")
         return
-    if not current_path:
-        logger.info("trim_queue_to: empty filename, skipping")
+    if last_played not in lines:
+        logger.info("restore_queue_position: %r not in queue, skipping", last_played)
         return
-    if current_path not in lines:
-        logger.info("trim_queue_to: %r not in queue (queue starts: %r), skipping",
-                    current_path, lines[:2] if lines else [])
-        return
-    idx = lines.index(current_path)
+    idx = lines.index(last_played)
     if idx == 0:
         return
-    with open(PLAYLIST_FILE, "w") as f:
-        f.write("\n".join(lines[idx:]))
-    logger.info("Queue trimmed: dropped %d played track(s), now at %r", idx, current_path)
+    write_playlist(lines[idx:])
+    logger.info("Restored queue position: dropped %d played tracks, resuming at %r",
+                idx, last_played)
 
 
 def set_mode(mode: str) -> None:
@@ -867,6 +870,7 @@ bot.on_ready = _on_bot_ready
 async def lifespan(app: FastAPI):
     global _secret
     _secret = auth.load_or_create_secret(settings.session_secret)
+    restore_queue_position()
     bot_task = asyncio.create_task(bot.run())
     logger.info("Matrix bot started")
     yield
@@ -951,7 +955,11 @@ async def track_changed(
         "path": filename, "thumb": "", "key": "", "duration": 0,
     }
     current_filename = filename
-    trim_queue_to(filename)
+    try:
+        with open(LAST_PLAYED_FILE, "w") as f:
+            f.write(filename)
+    except Exception:
+        logger.warning("Could not write last_played file")
 
     try:
         candidates = plex.search_tracks(title, limit=10)
