@@ -759,6 +759,52 @@ _welcome_lines.append("\n" + HELP_TEXT)
 bot.welcome_message = "\n".join(_welcome_lines)
 
 
+async def _backfill_now_playing() -> None:
+    """Populate now_playing from Liquidsoap telnet if track_changed hasn't fired yet.
+
+    Liquidsoap fires on_metadata almost immediately on startup, often before
+    radio-service is ready to accept the POST. This recovers from that race.
+    """
+    global now_playing, now_playing_thumb, current_track, current_filename
+    if now_playing.title:
+        return
+    try:
+        meta = await liquidsoap.get_on_air_metadata()
+        title = meta.get("title", "")
+        artist = meta.get("artist", "")
+        if not title:
+            return
+        started_at = float(meta.get("on_air_timestamp", 0) or 0) or time.time()
+        filename = meta.get("filename", "")
+        now_playing.title = title
+        now_playing.artist = artist
+        now_playing.album = meta.get("album", "")
+        now_playing.started_at = started_at
+        current_filename = filename
+        current_track = {
+            "title": title, "artist": artist, "album": meta.get("album", ""),
+            "path": filename, "thumb": "", "key": "", "duration": 0,
+        }
+        # Enrich with Plex data (thumb + duration)
+        candidates = plex.search_tracks(title, limit=10)
+        if candidates:
+            def norm(s): return s.lower().replace(" ", "").replace("-", "")
+            an = norm(artist)
+            match = next(
+                (t for t in candidates if norm(t["artist"]) in an or an in norm(t["artist"])),
+                candidates[0],
+            )
+            current_track = match
+            if match.get("thumb"):
+                now_playing_thumb = match["thumb"]
+                now_playing.has_album_art = True
+            if match.get("duration"):
+                now_playing.duration = match["duration"]
+        logger.info("Backfilled now_playing from Liquidsoap: %s — %s", artist, title)
+    except Exception:
+        logger.warning("Could not backfill now_playing from Liquidsoap on startup")
+
+
 async def _on_bot_ready() -> None:
     saved_mode = load_mode()
     try:
@@ -777,6 +823,8 @@ async def _on_bot_ready() -> None:
             write_playlist(tracks)
         set_mode("random")
         resume_msg = "Playing: random shuffle ({} tracks)".format(len(tracks) if tracks else 0)
+
+    await _backfill_now_playing()
     listen_line = f"\nListen in: {settings.stream_url}" if settings.stream_url else ""
     ai_line = "\nAI DJ is online — @-mention me to chat." if ai else ""
     await bot.send_message(f"Radio bot online!{listen_line}\n{resume_msg}{ai_line}\n\n{HELP_TEXT}")

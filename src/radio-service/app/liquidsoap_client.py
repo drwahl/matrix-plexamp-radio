@@ -61,3 +61,17 @@ class LiquidsoapClient:
 
     async def now_on_air(self) -> str:
         return await self._command("request.on_air")
+
+    async def get_on_air_metadata(self) -> dict[str, str]:
+        """Return parsed metadata for the currently playing track, or {}."""
+        on_air = await self._command("request.on_air")
+        rids = [r for r in on_air.split() if r.strip().isdigit()]
+        if not rids:
+            return {}
+        raw = await self._command(f"request.metadata {rids[0]}")
+        meta: dict[str, str] = {}
+        for line in raw.splitlines():
+            if "=" in line:
+                key, _, val = line.partition("=")
+                meta[key.strip()] = val.strip().strip('"')
+        return meta

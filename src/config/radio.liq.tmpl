@@ -38,13 +38,19 @@ def on_track(m) =
       "&artist="  ^ url.encode(artist)   ^
       "&album="   ^ url.encode(album)    ^
       "&filename=" ^ url.encode(filename)
-    ignore(
-      http.post(
-        "http://localhost:8081/internal/track-changed",
-        headers=[("Content-Type", "application/x-www-form-urlencoded")],
-        data=data
+    def post() =
+      ignore(
+        http.post(
+          "http://localhost:8081/internal/track-changed",
+          headers=[("Content-Type", "application/x-www-form-urlencoded")],
+          data=data
+        )
       )
-    )
+    end
+    # Fire immediately, then retry after 5s to handle startup race with radio-service.
+    # The duplicate is deduped server-side (same title+artist is a no-op).
+    post()
+    thread.run(fast=false, delay=5., post)
   end
   ignore(thread.run(fast=false, do_notify))
 end
