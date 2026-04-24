@@ -37,6 +37,7 @@ LOGIN_HTML = (Path(__file__).parent.parent / "web" / "login.html").read_text()
 # Shared state
 now_playing = NowPlaying()
 now_playing_thumb: str = ""
+current_track: dict = {}   # full Plex track dict for the current track; empty if unknown
 current_mode: str = "random"
 current_filename: str = ""
 _secret: bytes = b""
@@ -849,7 +850,7 @@ async def track_changed(
     album: str = Form(default=""),
     filename: str = Form(default=""),
 ) -> dict:
-    global now_playing, now_playing_thumb, current_filename
+    global now_playing, now_playing_thumb, current_track, current_filename
 
     if title == now_playing.title and artist == now_playing.artist:
         return {"ok": True}
@@ -859,6 +860,10 @@ async def track_changed(
         started_at=time.time(),
     )
     now_playing_thumb = ""
+    current_track = {
+        "title": title, "artist": artist, "album": album,
+        "path": filename, "thumb": "", "key": "", "duration": 0,
+    }
     current_filename = filename
 
     try:
@@ -871,6 +876,7 @@ async def track_changed(
                  in artist_norm or artist_norm in norm(t["artist"])),
                 candidates[0],
             )
+            current_track = match
             if match.get("thumb"):
                 now_playing_thumb = match["thumb"]
                 now_playing.has_album_art = True
@@ -1117,3 +1123,40 @@ async def get_album_art() -> Response:
     async with httpx.AsyncClient() as client:
         r = await client.get(url)
     return Response(content=r.content, media_type=r.headers.get("content-type", "image/jpeg"))
+
+
+@app.post("/api/now-playing/save")
+async def save_now_playing(request: Request, playlist: str = Form(...)) -> dict:
+    """Add the currently playing track to a playlist.
+
+    playlist='mylist' → user's personal playlist
+    playlist=<name>   → named shared playlist
+    """
+    user_id = _session_user(request)
+    if not user_id:
+        return Response(status_code=401)
+    if not current_track.get("path"):
+        return {"ok": False, "error": "Nothing playing"}
+
+    track = current_track
+
+    if playlist == "mylist":
+        playlists = _load_user_playlists()
+        tracks = playlists.setdefault(user_id, [])
+        if any(t["path"] == track["path"] for t in tracks):
+            return {"ok": True, "already": True}
+        tracks.append(track)
+        _save_user_playlists(playlists)
+        return {"ok": True, "n": len(tracks)}
+
+    shared = _load_shared_playlists()
+    match = _find_shared(playlist, shared)
+    if not match:
+        return {"ok": False, "error": "Playlist not found"}
+    tracks = shared[match].setdefault("tracks", [])
+    if any(t["path"] == track["path"] for t in tracks):
+        return {"ok": True, "already": True}
+    tracks.append(track)
+    _save_shared_playlists(shared)
+    _sync_to_plex(match, tracks)
+    return {"ok": True, "n": len(tracks)}

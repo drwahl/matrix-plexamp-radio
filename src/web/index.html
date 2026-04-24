@@ -54,6 +54,43 @@
     #track-album  { font-size: 0.9rem; color: #666; }
     #track-mode   { font-size: 0.75rem; color: #555; margin-top: 0.5rem; font-style: italic; }
 
+    #save-row { position: relative; margin-top: 0.6rem; }
+    #save-to-btn {
+      font-size: 0.75rem;
+      background: none;
+      border: 1px solid #333;
+      border-radius: 12px;
+      color: #888;
+      padding: 0.2rem 0.7rem;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    #save-to-btn:hover { border-color: #1db954; color: #1db954; }
+    #save-dropdown {
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
+      top: calc(100% + 6px);
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 8px;
+      min-width: 180px;
+      z-index: 100;
+      overflow: hidden;
+    }
+    #save-dropdown.hidden { display: none; }
+    .save-option {
+      padding: 0.5rem 1rem;
+      font-size: 0.85rem;
+      cursor: pointer;
+      color: #ccc;
+      white-space: nowrap;
+    }
+    .save-option:hover { background: #2a2a2a; color: #fff; }
+    .save-option.divider { border-top: 1px solid #2a2a2a; }
+    .save-option.feedback { color: #1db954; cursor: default; }
+    .save-option.feedback:hover { background: none; }
+
     #progress-row {
       width: 100%;
       max-width: 340px;
@@ -370,6 +407,10 @@
     <div id="track-artist"></div>
     <div id="track-album"></div>
     <div id="track-mode"></div>
+    <div id="save-row">
+      <button id="save-to-btn">＋ Add to playlist</button>
+      <div id="save-dropdown" class="hidden"></div>
+    </div>
   </div>
 
   <div id="progress-row">
@@ -498,6 +539,7 @@
     let lastTitle = null;
     let npStartedAt = 0;
     let npDuration = 0;
+    let now_playing_title = '';
 
     function fmtTime(s) {
       s = Math.max(0, Math.floor(s));
@@ -529,6 +571,7 @@
 
         npStartedAt = d.started_at || 0;
         npDuration  = d.duration   || 0;
+        now_playing_title = d.title || '';
         progressDuration.textContent = npDuration ? fmtTime(npDuration) : '';
 
         const art = document.getElementById('album-art');
@@ -714,6 +757,56 @@
 
     loadMyPlaylist();
 
+    // Save-to-playlist dropdown
+    const saveToBtn  = document.getElementById('save-to-btn');
+    const saveDropdown = document.getElementById('save-dropdown');
+    let sharedPlaylistNames = [];
+
+    function buildSaveDropdown() {
+      const options = [
+        `<div class="save-option" data-pl="mylist">My Playlist</div>`,
+        ...sharedPlaylistNames.map((name, i) =>
+          `<div class="save-option${i === 0 ? ' divider' : ''}" data-pl="${esc(name)}">${esc(name)}</div>`
+        ),
+      ];
+      saveDropdown.innerHTML = options.join('');
+    }
+
+    saveToBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      if (!now_playing_title) return;
+      buildSaveDropdown();
+      saveDropdown.classList.toggle('hidden');
+    });
+
+    saveDropdown.addEventListener('click', async e => {
+      const opt = e.target.closest('.save-option');
+      if (!opt || opt.classList.contains('feedback')) return;
+      const pl = opt.dataset.pl;
+      opt.textContent = '…';
+      const fd = new FormData();
+      fd.append('playlist', pl);
+      try {
+        const r = await fetch('/api/now-playing/save', { method: 'POST', body: fd });
+        const d = await r.json();
+        if (d.already) {
+          opt.textContent = 'Already saved';
+        } else if (d.ok) {
+          opt.textContent = d.n !== undefined ? `Saved (#${d.n})` : 'Saved!';
+          if (pl === 'mylist') loadMyPlaylist();
+          else loadSharedPlaylists();
+        } else {
+          opt.textContent = d.error || 'Error';
+        }
+      } catch (_) {
+        opt.textContent = 'Error';
+      }
+      opt.classList.add('feedback');
+      setTimeout(() => saveDropdown.classList.add('hidden'), 1200);
+    });
+
+    document.addEventListener('click', () => saveDropdown.classList.add('hidden'));
+
     // Shared Playlists
     const sharedList = document.getElementById('shared-list');
 
@@ -752,7 +845,10 @@
     async function loadSharedPlaylists() {
       try {
         const r = await fetch('/api/shared-playlists');
-        if (r.ok) renderSharedPlaylists((await r.json()).playlists);
+        if (!r.ok) return;
+        const data = await r.json();
+        sharedPlaylistNames = data.playlists.map(p => p.name);
+        renderSharedPlaylists(data.playlists);
       } catch (_) {}
     }
 
