@@ -761,16 +761,22 @@ bot.welcome_message = "\n".join(_welcome_lines)
 
 async def _on_bot_ready() -> None:
     saved_mode = load_mode()
-    if saved_mode and saved_mode != "random":
+    try:
+        with open(PLAYLIST_FILE) as f:
+            queued = [ln.strip() for ln in f if ln.strip()]
+    except FileNotFoundError:
+        queued = []
+
+    if saved_mode and queued:
         set_mode(saved_mode)
-        resume_msg = f"Resuming: {saved_mode}"
+        resume_msg = f"Resuming: {saved_mode} ({len(queued)} tracks in queue)"
     else:
         tracks = plex.get_all_tracks()
         if tracks:
             random.shuffle(tracks)
             write_playlist(tracks)
         set_mode("random")
-        resume_msg = f"Playing: random shuffle ({len(tracks) if tracks else 0} tracks)"
+        resume_msg = "Playing: random shuffle ({} tracks)".format(len(tracks) if tracks else 0)
     listen_line = f"\nListen in: {settings.stream_url}" if settings.stream_url else ""
     ai_line = "\nAI DJ is online — @-mention me to chat." if ai else ""
     await bot.send_message(f"Radio bot online!{listen_line}\n{resume_msg}{ai_line}\n\n{HELP_TEXT}")
